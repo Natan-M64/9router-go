@@ -110,7 +110,7 @@ func TestRunningPIDMalformedFile(t *testing.T) {
 func TestRunningPIDReportsLiveProcess(t *testing.T) {
 	isolate(t)
 	pid := livePID(t)
-	writePIDFile(t, pidLine(pid, selfExecutable(t)))
+	writePIDFile(t, string(formatPID(pid)))
 
 	if got := RunningPID(); got != pid {
 		t.Fatalf("RunningPID() = %d, want the live pid %d", got, pid)

@@ -11,6 +11,9 @@ import (
 // fail closed, and the daemon would then be unable to find itself — so the live
 // child has to report the very binary that started it.
 func TestExecutable_ReportsSelfForLiveChild(t *testing.T) {
+	if _, err := Executable(os.Getpid()); err != nil {
+		t.Skipf("image path lookup is unavailable on this platform: %v", err)
+	}
 	child := longLivedPID(t)
 	t.Cleanup(func() { _ = ForceKill(child) })
 

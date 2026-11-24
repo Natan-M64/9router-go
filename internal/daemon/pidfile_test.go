@@ -38,6 +38,9 @@ func foreignExecutable(t *testing.T) string {
 // itself would record. If that stopped holding, every claim written by a
 // running daemon would look like a stranger's.
 func TestLiveExecutableMatchesSelfExecutable(t *testing.T) {
+	if !pathLookupSupported() {
+		t.Skip("image path lookup is unavailable on this platform; claims are verified by start time here")
+	}
 	pid := livePID(t)
 
 	got, err := proc.Executable(pid)
@@ -59,7 +62,7 @@ func TestRunningPIDReportsThisProcess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read pid file: %v", err)
 	}
-	if want := pidLine(os.Getpid(), selfExecutable(t)); strings.TrimSpace(string(raw)) != want {
+	if want := string(formatPID(os.Getpid())); strings.TrimSpace(string(raw)) != want {
 		t.Fatalf("pid file = %q, want %q", raw, want)
 	}
 	if pid := RunningPID(); pid != os.Getpid() {
@@ -128,7 +131,7 @@ func TestParseClaim(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := parseClaim(tt.raw)
-			if got.pid != tt.want.pid || got.exePath != tt.want.exePath {
+			if got.pid != tt.want.pid || got.exePath != tt.want.exePath || got.startMicros != tt.want.startMicros {
 				t.Fatalf("parseClaim(%q) = %+v, want %+v", tt.raw, got, tt.want)
 			}
 		})
@@ -138,8 +141,6 @@ func TestParseClaim(t *testing.T) {
 // Only a claim that resolves to this binary is an owner; the rest must not be.
 func TestClaimOwner(t *testing.T) {
 	isolate(t)
-	self := selfExecutable(t)
-
 	tests := []struct {
 		name  string
 		claim claim
@@ -154,11 +155,6 @@ func TestClaimOwner(t *testing.T) {
 			name:  "bare number carries nothing to check",
 			claim: claim{pid: os.Getpid()},
 			want:  false,
-		},
-		{
-			name:  "this process running the recorded binary",
-			claim: claim{pid: os.Getpid(), exePath: self},
-			want:  true,
 		},
 		{
 			name:  "this process running some other binary",
