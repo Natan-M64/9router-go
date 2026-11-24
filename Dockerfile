@@ -25,7 +25,7 @@ ARG TARGETARCH
 ARG VERSION
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    VERSION=${VERSION:-$(cat VERSION 2>/dev/null || cat version.json | sed -n 's/.*"latestVersion": *"\([^"]*\)".*/\1/p')} && \
+    VERSION=${VERSION:-$(cat VERSION 2>/dev/null || sed -n 's/.*"latestVersion": *"\([^"]*\)".*/\1/p' version.json)} && \
     echo "Building version $VERSION for ${TARGETOS:-linux}/${TARGETARCH:-amd64} on $BUILDPLATFORM" && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -trimpath -ldflags="-s -w -X '9router/proxy/internal/updater.CurrentVersion=${VERSION}'" -o 9router-go ./cmd/9router-go/
@@ -33,6 +33,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # Stage 3: Minimal runtime image for target platform
 FROM alpine:3.21
 
+# hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates tzdata && \
     addgroup -S -g 10001 9router && \
     adduser -S -u 10001 -G 9router -h /data -s /sbin/nologin 9router && \

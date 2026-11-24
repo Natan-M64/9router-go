@@ -28,10 +28,6 @@ on:
         description: "Tag extra opcional (ex: edge, custom-v1)"
         required: false
         default: ""
-      platforms:
-        description: "Plataformas alvo para build multi-arch"
-        required: false
-        default: "linux/amd64,linux/arm64"
       push:
         description: "Publicar imagem no GHCR"
         type: boolean
@@ -50,12 +46,88 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  docker:
-    name: Build & Push (GHCR)
+  # Native multi-arch matrix (amd64 + arm64) without QEMU emulation.
+  # Each runner builds its native architecture in parallel and pushes by digest;
+  # the `merge` job below combines them into one multi-arch manifest list.
+  build:
+    name: Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            arch_slug: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            arch_slug: arm64
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare image metadata
+        id: prep
+        run: |
+          set -euo pipefail
+          REPO_LOWER="${GITHUB_REPOSITORY,,}"
+          echo "image=${REGISTRY}/${REPO_LOWER}" >> "$GITHUB_OUTPUT"
+
+          if [ "${GITHUB_REF_TYPE:-branch}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$(cat VERSION 2>/dev/null || echo 'dev')"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request' && (inputs.push == null || inputs.push == true)
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          push: ${{ github.event_name != 'pull_request' && (inputs.push == null || inputs.push == true) }}
+          load: ${{ github.event_name == 'pull_request' || inputs.push == false }}
+          outputs: ${{ (github.event_name != 'pull_request' && (inputs.push == null || inputs.push == true)) && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', steps.prep.outputs.image) || '' }}
+          build-args: |
+            VERSION=${{ steps.prep.outputs.version }}
+          provenance: ${{ github.event_name != 'pull_request' && (inputs.push == null || inputs.push == true) && 'mode=max' || 'false' }}
+          sbom: ${{ github.event_name != 'pull_request' && (inputs.push == null || inputs.push == true) }}
+          cache-from: type=gha,scope=ghcr-${{ matrix.arch_slug }}
+          cache-to: type=gha,mode=max,scope=ghcr-${{ matrix.arch_slug }}
+
+      - name: Export digest
+        if: github.event_name != 'pull_request' && (inputs.push == null || inputs.push == true)
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest artifact
+        if: github.event_name != 'pull_request' && (inputs.push == null || inputs.push == true)
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.arch_slug }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Publish multi-arch manifest
+    needs: build
+    if: github.event_name != 'pull_request' && (inputs.push == null || inputs.push == true)
     runs-on: ubuntu-latest
-    outputs:
-      image: ${{ steps.prep.outputs.image }}
-      digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -80,14 +152,17 @@ jobs:
           fi
           echo "extra_tags=${EXTRA_TAGS}" >> "$GITHUB_OUTPUT"
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request' && (inputs.push == null || inputs.push == true)
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -101,7 +176,6 @@ jobs:
           images: ${{ steps.prep.outputs.image }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
@@ -113,38 +187,30 @@ jobs:
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.version=${{ steps.prep.outputs.version }}
 
-      - name: Build and push Docker image
-        id: build
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: ${{ inputs.platforms || (github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64') }}
-          push: ${{ github.event_name != 'pull_request' && (inputs.push == null || inputs.push == true) }}
-          load: ${{ github.event_name == 'pull_request' || inputs.push == false }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ steps.prep.outputs.version }}
-          provenance: ${{ github.event_name != 'pull_request' && (inputs.push == null || inputs.push == true) && 'mode=max' || 'false' }}
-          sbom: ${{ github.event_name != 'pull_request' && (inputs.push == null || inputs.push == true) }}
-          cache-from: type=gha,scope=ghcr
-          cache-to: type=gha,mode=max,scope=ghcr
-
-      - name: Write job summary
-        if: always()
+      - name: Create and push manifest list
+        working-directory: /tmp/digests
         run: |
+          docker buildx imagetools create \
+            $(printf ' -t %s' ${{ steps.meta.outputs.tags }}) \
+            $(printf ' ${{ steps.prep.outputs.image }}@sha256:%s' *)
+
+      - name: Inspect manifest & write summary
+        run: |
+          FIRST_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n 1)
           {
-            echo "### GHCR Docker Build"
+            echo "### GHCR Multi-Arch Image Published"
             echo ""
             echo "- **Image:** \`${{ steps.prep.outputs.image }}\`"
             echo "- **Version:** \`${{ steps.prep.outputs.version }}\`"
-            echo "- **Push:** \`${{ github.event_name != 'pull_request' && (inputs.push == null || inputs.push == true) }}\`"
-            if [ -n "${{ steps.build.outputs.digest }}" ]; then
-              echo "- **Digest:** \`${{ steps.build.outputs.digest }}\`"
-            fi
+            echo "- **Platforms:** \`linux/amd64, linux/arm64\` (native runners, no QEMU)"
             echo ""
             echo "#### Tags"
             echo '```'
             echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            echo ""
+            echo "#### Manifest"
+            echo '```'
+            docker buildx imagetools inspect "$FIRST_TAG"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

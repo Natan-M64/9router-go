@@ -18,6 +18,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Build the embedded SPA once and share web/dist with Go jobs that only need
+  # it for `go:embed` (windows-service, race, coverage, integration).
+  build-web:
+    name: Build Web SPA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Build Web SPA
+        working-directory: web
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
+      - name: Upload web/dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 1
+          if-no-files-found: error
+
   # Fast feedback, and it builds nothing: every job below rebuilds the SPA
   # before it can compile a Go package (web/embed.go has no files to embed
   # otherwise), while this one lints source, so a formatting slip or a reachable
@@ -325,25 +360,18 @@ jobs:
   # running the whole suite twice.
   windows-service:
     name: Service tests (Windows)
+    needs: build-web
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
       # web/dist must exist before any Go package compiles: go test builds the
       # module graph, and web/embed.go has no files to embed without it.
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Download web/dist artifact
+        uses: actions/download-artifact@v4
         with:
-          bun-version: 1.4.2
-
-      # `bun install` is not optional: the build script runs `tsc`, which lives
-      # in node_modules, so without it the job failed at "bun: command not
-      # found: tsc" before a single Go test ran.
-      - name: Build Web SPA
-        working-directory: web
-        run: |
-          bun install --frozen-lockfile
-          bun run build
+          name: web-dist
+          path: web/dist
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -379,22 +407,18 @@ jobs:
   # un-raced build, and internal/handlers/chat alone takes ~50s without it.
   race:
     name: Race detector
+    needs: build-web
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       # web/dist must exist before any Go package compiles. The SPA is
       # otherwise untouched by this job.
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Download web/dist artifact
+        uses: actions/download-artifact@v4
         with:
-          bun-version: 1.4.2
-
-      - name: Build Web SPA
-        run: |
-          cd web
-          bun install --frozen-lockfile
-          bun run build
+          name: web-dist
+          path: web/dist
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -415,18 +439,15 @@ jobs:
   # web/dist for the same reason every other Go job does.
   coverage:
     name: Coverage
+    needs: build-web
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Download web/dist artifact
+        uses: actions/download-artifact@v4
         with:
-          bun-version: 1.4.2
-      - name: Build Web SPA
-        run: |
-          cd web
-          bun install --frozen-lockfile
-          bun run build
+          name: web-dist
+          path: web/dist
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -463,22 +484,18 @@ jobs:
   # before the 30s model-catalog sync.
   integration:
     name: Integration tests
+    needs: build-web
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       # The integration suite serves the dashboard SPA through
       # web/embed.go, so web/dist must exist before the package compiles.
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Download web/dist artifact
+        uses: actions/download-artifact@v4
         with:
-          bun-version: 1.4.2
-
-      - name: Build Web SPA
-        run: |
-          cd web
-          bun install --frozen-lockfile
-          bun run build
+          name: web-dist
+          path: web/dist
 
       - name: Set up Go
         uses: actions/setup-go@v5
