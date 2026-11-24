@@ -6,6 +6,13 @@ matching request carries it ahead of the original content. Injection is opt-in
 and off by default: a model is never injected because it exists, only because
 you armed it.
 
+**Nothing is armed by default.** Keyword rules (below) are behind a global switch that is off on a
+fresh install, and the preset library sync is seeded disabled. To use a preset, either pick it in the
+combo's edit dialog (**Prompt injection**: Off, Default document, or a preset), which binds the combo's
+name and arms every leg of that combo, or bind a model on the Jailbreak page. Turn **Match presets by
+model keyword** on only if you want keyword rules to arm requests by themselves. Every injected request
+carries the preset's whole prompt, which costs tokens. The page is hidden by default (Settings, sidebar).
+
 The dashboard page is **Jailbreak** (sidebar tab). Everything below is also
 available over the REST API listed at the end.
 
@@ -42,6 +49,9 @@ This is the precise tool: use it when one id needs a different preset from the
 rest of its family, or when you want a whole combo armed regardless of its legs.
 
 ### Keywords (include)
+
+Keyword rules only apply while **Match presets by model keyword** is on (`GET`/`PUT /api/jailbreak/keywords`,
+off by default); exact bindings do not depend on it.
 
 A keyword on a preset covers every model id that matches it, across providers
 and combo legs, with no per-model setup. This is the tool for "the same preset
