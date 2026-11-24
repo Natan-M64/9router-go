@@ -71,3 +71,18 @@ func TestGitBranchMarkerIsNotAMarkdownBullet(t *testing.T) {
 		t.Errorf("detached-HEAD output no longer selects git-branch: %v", f)
 	}
 }
+
+// `go test` prints "ok" and "FAIL" in exactly that case. The filter's pattern
+// was compiled case-insensitive, so prose that begins a line with "fail" counted
+// as a second sign of Go test output.
+func TestGoTestFilterNeedsTheExactStatusWord(t *testing.T) {
+	cfg := DefaultRTKConfig()
+	prose := "--- FAIL: this heading appears in a changelog entry\nfail the test rather than pass it.\n"
+	if f := MatchFilter(prose, "", cfg); f != nil && f.ID == "test-go" {
+		t.Error("prose selected the test-go filter")
+	}
+	real := "--- FAIL: TestX (0.00s)\nFAIL\tpkg/x\t0.01s\n"
+	if f := MatchFilter(real, "", cfg); f == nil || f.ID != "test-go" {
+		t.Errorf("real go test failure no longer selects test-go: %v", f)
+	}
+}
