@@ -9,7 +9,7 @@ Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 
 | ID | Expected result | State |
 |---|---|---|
-| O1 | **Bloco 1 (Cache & Token Quick Wins)**: manter `CavemanAutoClarity` prefix-safe (cauda), corrigir `Headroom` `guard.go` por mensagem + remover duplo RTK, completar `AnchorClaudeCacheWithTTL` + `PreserveCacheControl` no OpenRouter e portar `compactMCPSnapshot` no RTK | Ready to start. |
+| O1 | **Bloco 1 (Cache & Token Quick Wins)**: manter `CavemanAutoClarity` prefix-safe (cauda), corrigir `Headroom` `guard.go` por mensagem + remover duplo RTK, completar `AnchorClaudeCacheWithTTL` + `PreserveCacheControl` no OpenRouter e compactar snapshots ARIA/MCP no RTK | Ready to start. |
 
 ## Next (in order)
 
