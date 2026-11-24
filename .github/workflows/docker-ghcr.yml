@@ -91,7 +91,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push by digest
+      - name: Build and push architecture image
         id: build
         uses: docker/build-push-action@v7
         with:
@@ -99,11 +99,11 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: ${{ github.event_name != 'pull_request' && (inputs.push == null || inputs.push == true) }}
           load: ${{ github.event_name == 'pull_request' || inputs.push == false }}
-          outputs: ${{ (github.event_name != 'pull_request' && (inputs.push == null || inputs.push == true)) && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', steps.prep.outputs.image) || '' }}
+          tags: ${{ steps.prep.outputs.image }}:build-${{ matrix.arch_slug }}-${{ github.run_id }}
           build-args: |
             VERSION=${{ steps.prep.outputs.version }}
-          provenance: ${{ github.event_name != 'pull_request' && (inputs.push == null || inputs.push == true) && 'mode=max' || 'false' }}
-          sbom: ${{ github.event_name != 'pull_request' && (inputs.push == null || inputs.push == true) }}
+          provenance: false
+          sbom: false
           cache-from: type=gha,scope=ghcr-${{ matrix.arch_slug }}
           cache-to: type=gha,mode=max,scope=ghcr-${{ matrix.arch_slug }}
 
