@@ -418,13 +418,16 @@ func AppendTailUserNote(body []byte, note string) ([]byte, bool) {
 		return body, false
 	}
 	arr := toMessageArray(req["messages"])
-	for i := len(arr) - 1; i >= 0; i-- {
+	// Only the true tail qualifies. In a tool loop the last message is an
+	// assistant or tool turn, and the nearest user message sits mid-history:
+	// editing it would rewrite the cached prefix from that point on.
+	for i := len(arr) - 1; i >= len(arr)-1 && i >= 0; i-- {
 		m, ok := arr[i].(map[string]any)
 		if !ok {
-			continue
+			return body, false
 		}
 		if role, _ := m["role"].(string); role != "user" {
-			continue
+			return body, false
 		}
 		switch c := m["content"].(type) {
 		case string:

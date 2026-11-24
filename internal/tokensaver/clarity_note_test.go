@@ -120,3 +120,31 @@ func messagesOf(t *testing.T, body []byte) []map[string]any {
 	}
 	return out
 }
+
+// In a tool loop the last message is a tool or assistant turn. The nearest user
+// message is mid-history, and editing it would rewrite the cached prefix, so the
+// note must be skipped instead of moved there.
+func TestAppendTailUserNoteSkipsWhenTailIsNotUser(t *testing.T) {
+	body := []byte(`{"messages":[` +
+		`{"role":"user","content":"do it"},` +
+		`{"role":"assistant","tool_calls":[{"id":"c1","type":"function","function":{"name":"f","arguments":"{}"}}]},` +
+		`{"role":"tool","tool_call_id":"c1","content":"ok"}]}`)
+	out, did := AppendTailUserNote(body, CavemanClarityNote)
+	if did {
+		t.Fatalf("note was appended although the tail is a tool message: %s", out)
+	}
+	if string(out) != string(body) {
+		t.Fatalf("body changed: %s", out)
+	}
+	var req struct {
+		Messages []struct {
+			Content any `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(out, &req); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := req.Messages[0].Content.(string); strings.Contains(s, CavemanClarityNote) {
+		t.Fatal("mid-history user message was edited")
+	}
+}

@@ -838,7 +838,12 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 		// OpenAI-format request sent with an API key otherwise reaches Anthropic
 		// with no cache_control breakpoint at all. Runs after cloaking so the
 		// anchor lands on the final system/tools shape.
-		pipedBody = translator.AnchorClaudeCacheWithTTL(pipedBody, h.claudeCacheTTL())
+		//
+		// Anthropic only: other providers that speak the Messages format are
+		// not known to accept a ttl field or an array system prompt.
+		if isAnthropic {
+			pipedBody = translator.AnchorClaudeCacheWithTTL(pipedBody, h.claudeCacheTTL())
+		}
 	}
 
 	if isAnthropic || upstreamClaude {
