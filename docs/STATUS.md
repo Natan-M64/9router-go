@@ -3,6 +3,7 @@
 Updated 2026-11-24 · Fork `Natan-M64/9router-go` (upstream `luqman-v1/9router-go` / `decolua/9router`)
 Current milestone: **Fork sincronizado com o upstream (0 commits atrás) e estável** — RTK/cache de prompt, DeepSeek e sinal de compactação corrigidos. Próximo: catálogo NVIDIA, depois Bloco 2 (junto com o header `x-9router-connection`).
 Last proof: [journal/2026-11.md](journal/2026-11.md).
+Plano de otimização: [optimization-roadmap.md](optimization-roadmap.md) · Filtros do RTK: [RTK_FILTERS.md](RTK_FILTERS.md).
 Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 
 ## Now
