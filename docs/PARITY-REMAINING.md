@@ -43,7 +43,7 @@ Stack **Responses sudah tuntas** — diff 1, 2, 3, dan 4 semuanya terpush, `go b
 
 `POST /v1/responses` ke upstream yang **bukan** Responses-native.
 
-Worktree + branch: `/Users/luqmannul.hakim/gomod/project/9router-go-wt` → `parity/responses-translator`
+Worktree + branch: `<local-worktree>` → `parity/responses-translator`
 (sudah push ke origin).
 
 | Diff | Isi | Status |

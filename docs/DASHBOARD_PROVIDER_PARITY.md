@@ -231,7 +231,7 @@ masih lewat modal import manual.
 
 ### Lanjutan 2026-09-21 — port semua keluarga OAuth upstream
 
-Referensi: `/Users/luqmannul.hakim/htdocs/9router` (`src/lib/oauth/providers/*` 25 modul,
+Referensi: upstream `9router` Next.js reference (`src/lib/oauth/providers/*` 25 modul,
 `src/app/api/oauth/*`, `open-sse/providers/registry/*`, `open-sse/shared/{zedAuth,qoder/*}`).
 
 **Grup 1 — PKCE** (`internal/handlers/oauth/pkce.go`, generic `GET/POST /api/oauth/pkce/*`):

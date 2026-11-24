@@ -146,7 +146,7 @@ flowchart TD
 
 ### Section 2: Antigravity Tool Cloaking & Anti-Ban Decoy System
 
-#### 2.1 Decoy Tool Registry & Cloaking ([antigravity.go](file:///Users/luqmannul.hakim/gomod/project/9router-go/internal/translator/antigravity.go))
+#### 2.1 Decoy Tool Registry & Cloaking ([antigravity.go](../../../internal/translator/antigravity.go))
 - Add native Antigravity default tool names set:
   ```go
   var AntigravityNativeToolNames = map[string]bool{
@@ -168,7 +168,7 @@ flowchart TD
   - Updates `contents` message history (`functionCall.name` and `functionResponse.name`) with `_ide` suffix.
   - Returns updated request and `toolNameMap` (mapping `suffixed_name -> original_name`).
 
-#### 2.2 Response Uncloaking ([gemini.go](file:///Users/luqmannul.hakim/gomod/project/9router-go/internal/translator/gemini.go))
+#### 2.2 Response Uncloaking ([gemini.go](../../../internal/translator/gemini.go))
 - In non-stream translation (`TranslateGeminiResponseToOpenAI`) and SSE stream translation (`TranslateGeminiChunkToOpenAI`):
   - If a tool call name ends with `_ide`, strip `_ide` or look up in `toolNameMap`.
   - The client receives the clean original tool name (e.g. `Bash`, `ReadFile`).
