@@ -1,7 +1,7 @@
 # Status
 
 Updated 2026-11-24 · Fork `Natan-M64/9router-go` (upstream `luqman-v1/9router-go` / `decolua/9router`)
-Current milestone: **Estabilização do RTK e do cache de prompt** — `main` local `08e853d4` (Bloco 1, OpenRouter, snapshots MCP, filtro `gh`); branch `perf/rtk-filter-selection` (6 commits) em revisão. Nada disso está no fork ainda.
+Current milestone: **Estabilização do RTK e do cache de prompt** — `main` local `08e853d4` (Bloco 1, OpenRouter, snapshots MCP, filtro `gh`); branch `perf/rtk-filter-selection` revisada por um agente independente (sem bloqueadores; achados tratados), aguardando OK para a `main`. Nada disso está no fork ainda.
 Last proof: [journal/2026-11.md](journal/2026-11.md).
 Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 
@@ -9,7 +9,7 @@ Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 
 | ID | Expected result | State |
 |---|---|---|
-| O1 | **Seleção de filtros do RTK**: conteúdo exige 2 sinais (ou `strongPatterns`), padrões de seleção case-sensitive, cache de resultados (0,41 ms vs ~114 ms ao repetir). Medido: 445 de 463 arquivos comuns eram capturados por filtros de CLI, mantendo ~17% do texto | Implementado em `perf/rtk-filter-selection`; revisão independente em andamento; desvia do upstream (caixa e limiar), precisa de OK para ir à `main`. |
+| O1 | **Seleção de filtros do RTK**: conteúdo exige 2 sinais (ou `strongPatterns`), padrões de seleção case-sensitive, cache de resultados (0,41 ms vs ~114 ms ao repetir). Medido: 445 de 463 arquivos comuns eram capturados por filtros de CLI, mantendo ~17% do texto | Implementado e revisado em `perf/rtk-filter-selection`; desvia do upstream (caixa e limiar), precisa de OK para ir à `main`. |
 | O2 | **Prova do MVP**: smoke com upstream falso feito (chat 200, stream, 401 sem chave); falta provedor real e o job `integration` do CI | Partial. |
 
 ## Next (in order)
