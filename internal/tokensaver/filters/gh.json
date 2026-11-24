@@ -14,7 +14,7 @@
       "Created pull request",
       "Created issue",
       "✓\\s+Logged in",
-      "^(?-i:X)\\s+\\S+",
+      "^(?:\\x1b\\[[0-9;]*m)*[ \\t]*(?-i:X)(?:\\x1b\\[[0-9;]*m)*\\s+\\S+",
       "GraphQL error",
       "HTTP \\d{3}:"
     ]

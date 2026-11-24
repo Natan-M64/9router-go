@@ -23,3 +23,17 @@ func TestGitHubCLIFilterIsNotSelectedByWordsEndingInX(t *testing.T) {
 		t.Fatalf("a real gh failure line no longer selects the gh filter: %v", f)
 	}
 }
+
+// RTK selects a filter before it strips ANSI, and gh may indent or colour the
+// marker, so the anchored pattern must still find it.
+func TestGitHubCLIFilterSelectsIndentedAndColouredFailureMarker(t *testing.T) {
+	for _, cli := range []string{
+		"  X build-and-test  main  push  1m\n",
+		"\x1b[31mX\x1b[0m build-and-test  main  push  1m\n",
+		"\x1b[31mX build-and-test\x1b[0m  main  push  1m\n",
+	} {
+		if f := MatchFilter(cli, "", DefaultRTKConfig()); f == nil || f.ID != "gh" {
+			t.Errorf("gh filter not selected for %q: %v", cli, f)
+		}
+	}
+}
