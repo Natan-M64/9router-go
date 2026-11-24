@@ -3,9 +3,12 @@
 
   interface Props {
     onCreateClick: () => void
+    onImportClick: () => void
+    onExportClick: () => void
+    hasCombos?: boolean
   }
 
-  let { onCreateClick }: Props = $props()
+  let { onCreateClick, onImportClick, onExportClick, hasCombos = false }: Props = $props()
 </script>
 
 <div class="flex flex-col gap-4">
@@ -39,5 +42,13 @@
     <Button icon="add" size="sm" onclick={onCreateClick} class="whitespace-nowrap">
       Create Combo
     </Button>
+    <Button icon="upload" variant="secondary" size="sm" onclick={onImportClick} class="whitespace-nowrap">
+      Import JSON
+    </Button>
+    {#if hasCombos}
+      <Button icon="download" variant="secondary" size="sm" onclick={onExportClick} class="whitespace-nowrap">
+        Export JSON
+      </Button>
+    {/if}
   </div>
 </div>

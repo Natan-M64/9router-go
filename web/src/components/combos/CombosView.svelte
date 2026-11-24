@@ -26,6 +26,8 @@
   import ComboCard from './ComboCard.svelte'
   import CombosHeader from './CombosHeader.svelte'
   import CreateComboModal from './CreateComboModal.svelte'
+  import ImportCombosModal from './ImportCombosModal.svelte'
+  import { exportCombosToJson } from './comboImportExport'
   import ModelPickerModal from './ModelPickerModal.svelte'
   import CapacityAdapterSection from './CapacityAdapterSection.svelte'
   import ConfirmModal from '../../lib/ui/ConfirmModal.svelte'
@@ -593,10 +595,28 @@ async function handleSetContextWindow(combo: Combo, contextWindow: number) {
     }
   }
 
+  let isImportOpen = $state(false)
+
+  function handleExportCombos() {
+    const json = exportCombosToJson(llmCombos)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `9router-combos-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
 </script>
 
 <div class="flex min-w-0 flex-col gap-6 px-1 sm:px-0">
-  <CombosHeader onCreateClick={openCreateModal} />
+  <CombosHeader
+    onCreateClick={openCreateModal}
+    onImportClick={() => (isImportOpen = true)}
+    onExportClick={handleExportCombos}
+    hasCombos={llmCombos.length > 0}
+  />
   <div class="flex flex-wrap items-center justify-end gap-2">
     <div class="relative w-full sm:w-64">
       <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
@@ -812,4 +832,11 @@ async function handleSetContextWindow(combo: Combo, contextWindow: number) {
   }
   onClose={() => (confirmState = null)}
   onConfirm={handleDeleteCombos}
+/>
+
+<ImportCombosModal
+  isOpen={isImportOpen}
+  existingCombos={llmCombos}
+  onClose={() => (isImportOpen = false)}
+  onImported={loadData}
 />
