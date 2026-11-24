@@ -669,3 +669,19 @@ jobs:
           # sha256sum -c reads the file it is given and exits non-zero on any
           # mismatch, which is the property the updater relies on.
           sha256sum -c SHA256SUMS.txt
+
+  lint-docker-actions:
+    name: Lint Dockerfile & Workflows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint Dockerfile (hadolint)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning
+
+      - name: Lint GitHub Actions workflows (actionlint)
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/work" -w /work rhysd/actionlint:latest

@@ -1,20 +1,57 @@
 services:
   9router-go:
-    build: .
+    image: ${GHCR_IMAGE:-ghcr.io/luqman-v1/9router-go}:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: 9router-go
     ports:
-      - "20130:20130"
+      - "${PORT:-20130}:20130"
     volumes:
       - 9router-data:/data
+    env_file:
+      - path: .env
+        required: false
     environment:
-      - PORT=20130
-      - DATA_DIR=/data
-      # Token saver toggles (all default off except RTK):
-      # - RTK_ENABLED=true
-      # - CAVEMAN_ENABLED=false
-      # - PONYTAIL_ENABLED=false
-      # Or use DB_PATH for custom SQLite location:
-      # - DB_PATH=/data/custom/data.sqlite
+      # Server & Network
+      PORT: "${PORT:-20130}"
+      HOST: "${HOST:-0.0.0.0}"
+      TZ: "${TZ:-UTC}"
+
+      # Storage & Database
+      DATA_DIR: "${DATA_DIR:-/data}"
+      DB_PATH: "${DB_PATH:-}"
+      DATABASE_URL: "${DATABASE_URL:-}"
+
+      # Security & Auth
+      JWT_SECRET: "${JWT_SECRET:-}"
+      INITIAL_PASSWORD: "${INITIAL_PASSWORD:-}"
+      ROUTER_MASTER_KEY: "${ROUTER_MASTER_KEY:-}"
+      API_KEY_SECRET: "${API_KEY_SECRET:-}"
+      MACHINE_ID_SALT: "${MACHINE_ID_SALT:-}"
+
+      # Token Saver & Prompt Features
+      RTK_ENABLED: "${RTK_ENABLED:-true}"
+      CAVEMAN_ENABLED: "${CAVEMAN_ENABLED:-false}"
+      PONYTAIL_ENABLED: "${PONYTAIL_ENABLED:-false}"
+      ADHD_ENABLED: "${ADHD_ENABLED:-false}"
+      INJECTION_GUARD_DISABLED: "${INJECTION_GUARD_DISABLED:-false}"
+
+      # Routing & Resilience
+      FORCE_FALLBACK_ON_ALL_UNAVAILABLE: "${FORCE_FALLBACK_ON_ALL_UNAVAILABLE:-false}"
+      STRICT_SSL: "${STRICT_SSL:-false}"
+      ALLOW_PRIVATE_NETWORKING: "${ALLOW_PRIVATE_NETWORKING:-true}"
+      SEAT_ATTEMPT_BUDGET_MS: "${SEAT_ATTEMPT_BUDGET_MS:-0}"
+      KIRO_INTEGRITY_GATE: "${KIRO_INTEGRITY_GATE:-}"
+
+      # Runtime
+      AUTO_UPDATE: "${AUTO_UPDATE:-false}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${PORT:-20130}/health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
 volumes:

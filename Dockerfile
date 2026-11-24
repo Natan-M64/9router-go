@@ -28,11 +28,31 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     VERSION=${VERSION:-$(cat VERSION 2>/dev/null || cat version.json | sed -n 's/.*"latestVersion": *"\([^"]*\)".*/\1/p')} && \
     echo "Building version $VERSION for ${TARGETOS:-linux}/${TARGETARCH:-amd64} on $BUILDPLATFORM" && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
-    go build -ldflags="-s -w -X '9router/proxy/internal/updater.CurrentVersion=${VERSION}'" -o 9router-go ./cmd/9router-go/
+    go build -trimpath -ldflags="-s -w -X '9router/proxy/internal/updater.CurrentVersion=${VERSION}'" -o 9router-go ./cmd/9router-go/
 
 # Stage 3: Minimal runtime image for target platform
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates tzdata
+
+RUN apk add --no-cache ca-certificates tzdata && \
+    addgroup -S -g 10001 9router && \
+    adduser -S -u 10001 -G 9router -h /data -s /sbin/nologin 9router && \
+    mkdir -p /data && \
+    chown -R 9router:9router /data
+
 COPY --from=builder /app/9router-go /usr/local/bin/9router-go
+
+ENV PORT=20130 \
+    HOST=0.0.0.0 \
+    DATA_DIR=/data \
+    AUTO_UPDATE=false
+
+USER 9router:9router
+WORKDIR /data
+VOLUME ["/data"]
 EXPOSE 20130
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- "http://127.0.0.1:${PORT:-20130}/health" >/dev/null 2>&1 || exit 1
+
 ENTRYPOINT ["9router-go"]
+CMD ["serve"]
