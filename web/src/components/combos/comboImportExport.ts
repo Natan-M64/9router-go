@@ -10,11 +10,12 @@ export type ImportFormat = 'omniroute' | '9router'
  * objects or an array of rule objects. A bare keyword string is not a rule
  * object, so it becomes a keyword include rule with the default member cap.
  */
-export function importMatchRules(raw: unknown): string | SmartRule[] | undefined {
-  if (typeof raw === 'string') return raw.trim() ? raw : undefined
-  if (!Array.isArray(raw)) return undefined
+// normalizeRuleEntries turns each entry into a SmartRule: a bare string becomes a
+// keyword include rule, an object with a string pattern is kept as-is, anything
+// else is dropped.
+function normalizeRuleEntries(entries: unknown[]): SmartRule[] {
   const rules: SmartRule[] = []
-  raw.forEach((entry: unknown, i: number) => {
+  entries.forEach((entry: unknown, i: number) => {
     if (typeof entry === 'string') {
       const pattern = entry.trim()
       if (!pattern) return
@@ -33,6 +34,40 @@ export function importMatchRules(raw: unknown): string | SmartRule[] | undefined
       rules.push(entry as SmartRule)
     }
   })
+  return rules
+}
+
+// importMatchRules accepts the matchRules value of a combo in an import file. The
+// backend needs either a JSON array of rule objects (the form a stored combo
+// carries) or an array of rules; a bare keyword string is also accepted from
+// foreign files. A JSON array that is already rule objects is returned as the
+// original string, so the stored form round-trips unchanged. Anything the
+// backend could not read is normalized here or dropped, never passed through raw.
+export function importMatchRules(raw: unknown): string | SmartRule[] | undefined {
+  if (typeof raw === 'string') {
+    const text = raw.trim()
+    if (!text) return undefined
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      parsed = undefined
+    }
+    if (!parsed || typeof parsed !== 'object') {
+      // Not JSON, or a JSON scalar such as "123": a bare keyword such as "coding".
+      const rules = normalizeRuleEntries([text])
+      return rules.length ? rules : undefined
+    }
+    const entries: unknown[] = Array.isArray(parsed) ? parsed : [parsed]
+    const allRuleObjects =
+      entries.length > 0 &&
+      entries.every((e) => !!e && typeof e === 'object' && typeof (e as { pattern?: unknown }).pattern === 'string')
+    if (allRuleObjects) return text
+    const rules = normalizeRuleEntries(entries)
+    return rules.length ? rules : undefined
+  }
+  if (!Array.isArray(raw)) return undefined
+  const rules = normalizeRuleEntries(raw)
   return rules.length ? rules : undefined
 }
 

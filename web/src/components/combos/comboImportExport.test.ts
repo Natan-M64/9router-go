@@ -97,4 +97,28 @@ describe('comboImportExport', () => {
     const obj = { id: 'r9', pattern: 'a*', mode: 'glob', effect: 'exclude', enabled: true, maxMembers: 0, allKinds: true }
     expect(importMatchRules([obj])).toEqual([obj])
   })
+
+  // Foreign files carry bare keywords as a plain string or as a JSON array of
+  // strings. Both must become keyword rules, not reach the backend raw, which
+  // rejects them as unreadable.
+  test('importMatchRules normalizes a bare keyword string and a JSON array of keywords', () => {
+    const bare = importMatchRules('coding') as { pattern: string; mode: string }[]
+    expect(bare.map((r) => [r.pattern, r.mode])).toEqual([['coding', 'keyword']])
+
+    const numeric = importMatchRules('123') as { pattern: string }[]
+    expect(numeric.map((r) => r.pattern)).toEqual(['123'])
+
+    const jsonKeywords = importMatchRules('["coding", " review "]') as { pattern: string; mode: string }[]
+    expect(jsonKeywords.map((r) => [r.pattern, r.mode])).toEqual([
+      ['coding', 'keyword'],
+      ['review', 'keyword'],
+    ])
+  })
+
+  test('importMatchRules drops a value with no usable rule instead of passing it raw', () => {
+    expect(importMatchRules('   ')).toBeUndefined()
+    expect(importMatchRules('[]')).toBeUndefined()
+    expect(importMatchRules('[{"keyword":"x"}]')).toBeUndefined()
+    expect(importMatchRules(42)).toBeUndefined()
+  })
 })
