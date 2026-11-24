@@ -395,10 +395,11 @@ func CompressTextDetailed(text string, cfg RTKConfig) RTKCompressResult {
 	return CompressTextDetailedWithCommand(text, "", cfg)
 }
 
-// CompressTextDetailedWithCommand is CompressTextDetailed for text whose
-// originating command is known. An empty command means the command could not
-// be resolved, and only the content-scoped filters apply in that case.
-func CompressTextDetailedWithCommand(text string, command string, cfg RTKConfig) RTKCompressResult {
+// compressTextDetailedWithCommand is the uncached compression behind
+// CompressTextDetailedWithCommand, for text whose originating command is known.
+// An empty command means the command could not be resolved, and only the
+// content-scoped filters apply in that case.
+func compressTextDetailedWithCommand(text string, command string, cfg RTKConfig) RTKCompressResult {
 	origLen := len(text)
 	origTokens := (origLen + 3) / 4
 	if origLen == 0 {
