@@ -1,18 +1,12 @@
 name: Docker GHCR
 
 on:
+  # Publish only on release tags (or a manual dispatch). A push to main no
+  # longer builds and pushes an image: each code commit was producing a new
+  # sha tag plus a moved `latest`, twice per run (amd64 + arm64).
   push:
-    branches:
-      - main
     tags:
       - "v*"
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
-      - "wiki/**"
-      - "screenshots/**"
-      - "site/**"
-      - ".changes/**"
   pull_request:
     branches:
       - main
