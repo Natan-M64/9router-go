@@ -291,10 +291,11 @@ func (h *ChatHandler) logUsage(ctx context.Context, info *UsageLogInfo, usage *t
 	}
 
 	var ttftMs int64
-	var respContent string
+	var respContent, stopReason string
 	if metrics != nil {
 		ttftMs = metrics.TTFT
 		respContent = metrics.ResponseBuf.String()
+		stopReason = lastFinishReason(respContent)
 		if len(respContent) > constants.MaxResponseContentLen {
 			respContent = truncateDetailText(respContent, constants.MaxResponseContentLen, "...[truncated]")
 		}
@@ -479,6 +480,12 @@ func (h *ChatHandler) logUsage(ctx context.Context, info *UsageLogInfo, usage *t
 		"cost":           cost,
 		"request":        map[string]any{"messages": reqMsgs},
 		"response":       map[string]any{"content": respContent},
+	}
+	if stopReason != "" {
+		detailPayload["finishReason"] = stopReason
+	}
+	if n := requestedMaxTokens(openaiReq.MaxTokens, openaiReq.MaxCompletionTokens); n > 0 {
+		detailPayload["maxTokens"] = n
 	}
 	if len(findings) > 0 {
 		detailPayload["anomalies"] = findings
