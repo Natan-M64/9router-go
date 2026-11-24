@@ -1,0 +1,70 @@
+name: Upstream Model Sync Check
+
+on:
+  schedule:
+    # Every Monday at 09:00 UTC
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-upstream-models:
+    name: Compare upstream registry models
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check decolua/9router registry for new models
+        id: check
+        run: |
+          set -euo pipefail
+          report=$(python3 - <<'PY'
+          import json, re, urllib.request
+
+          providers = ("codex", "claude", "antigravity")
+          go_src = open("internal/providers/registry_models.go", encoding="utf-8").read()
+
+          def extract_go_models(provider: str) -> set[str]:
+              m = re.search(rf'"{provider}":\s*\{{([^}}]+)\}}', go_src)
+              if not m:
+                  return set()
+              return set(re.findall(r'"([^"]+)"', m.group(1)))
+
+          missing_by_provider = {}
+          for p in providers:
+              url = f"https://raw.githubusercontent.com/decolua/9router/master/open-sse/providers/registry/{p}.js"
+              js = urllib.request.urlopen(url, timeout=15).read().decode("utf-8")
+              m = re.search(r"models:\s*\[(.*?)\n\s*\],", js, re.S)
+              if not m:
+                  continue
+              upstream_ids = set(re.findall(r'id:\s*"([^"]+)"', m.group(1)))
+              go_ids = extract_go_models(p)
+              missing = sorted(upstream_ids - go_ids)
+              if missing:
+                  missing_by_provider[p] = missing
+
+          print(json.dumps(missing_by_provider))
+          PY
+          )
+          echo "report=${report}" >> "$GITHUB_OUTPUT"
+          if [ "$report" != "{}" ]; then
+            echo "has_diff=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_diff=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update tracking issue
+        if: steps.check.outputs.has_diff == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPORT: ${{ steps.check.outputs.report }}
+        run: |
+          set -euo pipefail
+          BODY=$(printf "Novos modelos detectados no upstream \`decolua/9router\` (\`master\`) ausentes em \`internal/providers/registry_models.go\`:\n\n\`\`\`json\n%s\n\`\`\`\n" "$REPORT")
+          gh issue create -R "${{ github.repository }}" \
+            --title "chore(providers): upstream models available to sync" \
+            --body "$BODY" || true

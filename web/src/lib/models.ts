@@ -1182,6 +1182,28 @@ export const BUILTIN_MODELS_BY_PROVIDER: Record<string, ProviderModel[]> = {
   ],
   "cx": [
     {
+      "id": "gpt-6.2-sol",
+      "name": "GPT 6.2 Sol"
+    },
+    {
+      "id": "gpt-6.2-sol[1m]",
+      "name": "GPT 6.2 Sol (extended context)",
+      "upstreamModelId": "gpt-6.2-sol"
+    },
+    {
+      "id": "gpt-6.2-astra",
+      "name": "GPT 6.2 Astra"
+    },
+    {
+      "id": "gpt-6.2-astra[1m]",
+      "name": "GPT 6.2 Astra (extended context)",
+      "upstreamModelId": "gpt-6.2-astra"
+    },
+    {
+      "id": "gpt-6.1-terra",
+      "name": "GPT 6.1 Terra"
+    },
+    {
       "id": "transcribe",
       "name": "Codex Transcription"
     },
