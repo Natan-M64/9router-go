@@ -172,7 +172,7 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
             type=sha,prefix=sha-
             ${{ steps.prep.outputs.extra_tags }}
           labels: |
