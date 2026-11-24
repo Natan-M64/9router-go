@@ -3,7 +3,9 @@ package translator
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	json "encoding/json/v2"
@@ -317,5 +319,49 @@ func TestSanitizeOpenAIToolsIsDeterministic(t *testing.T) {
 		if !bytes.Equal(got, first) {
 			t.Fatalf("SanitizeOpenAITools output not deterministic:\nfirst: %s\ngot:   %s", first, got)
 		}
+	}
+}
+
+// A gateway that keeps cache_control forwards the client's markers, and
+// Anthropic answers a fifth breakpoint with a 400. Only the last four survive.
+func TestFilterToOpenAIFormatJSONCapsPreservedCacheMarkers(t *testing.T) {
+	var blocks []string
+	for i := 0; i < 6; i++ {
+		blocks = append(blocks, fmt.Sprintf(`{"role":"user","content":[{"type":"text","text":"t%d","cache_control":{"type":"ephemeral"}}]}`, i))
+	}
+	body := []byte(`{"model":"m","messages":[` + strings.Join(blocks, ",") + `]}`)
+	out, err := FilterToOpenAIFormatJSON(body, FilterOptions{PreserveCacheControl: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(string(out), `"cache_control"`); got != 4 {
+		t.Fatalf("markers = %d, want 4:\n%s", got, out)
+	}
+	// The earliest two lost theirs; the latest four kept them.
+	var parsed struct {
+		Messages []struct {
+			Content []struct {
+				Text         string         `json:"text"`
+				CacheControl map[string]any `json:"cache_control"`
+			} `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(out, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []bool{false, false, true, true, true, true} {
+		blk := parsed.Messages[i].Content[0]
+		if blk.Text != fmt.Sprintf("t%d", i) {
+			t.Fatalf("block %d out of order: %q", i, blk.Text)
+		}
+		if has := blk.CacheControl != nil; has != want {
+			t.Errorf("block %d cache_control = %v, want %v", i, has, want)
+		}
+	}
+	// Four or fewer are left untouched, byte for byte.
+	small := []byte(`{"model":"m","messages":[{"role":"user","content":[{"type":"text","text":"a","cache_control":{"type":"ephemeral"}}]}]}`)
+	out2, _ := FilterToOpenAIFormatJSON(small, FilterOptions{PreserveCacheControl: true})
+	if string(out2) != string(small) {
+		t.Fatalf("a body within the cap was rewritten:\n%s", out2)
 	}
 }

@@ -72,6 +72,9 @@ func filterToOpenAIFormat(body map[string]any, opts FilterOptions) bool {
 			changed = true
 		}
 	}
+	if opts.PreserveCacheControl && capPreservedCacheMarkers(body) {
+		changed = true
+	}
 	if normalizeTools(body) {
 		changed = true
 	}
@@ -145,4 +148,44 @@ func parametersField(m map[string]any, key string) any {
 		return p
 	}
 	return map[string]any{"type": "object", "properties": map[string]any{}}
+}
+
+// maxCacheMarkers is how many cache_control breakpoints one request may carry.
+// Anthropic answers a fifth with a 400, and a gateway that forwards the markers
+// (OpenRouter, the Alibaba gateways) passes that on.
+const maxCacheMarkers = 4
+
+// capPreservedCacheMarkers keeps the last maxCacheMarkers cache_control markers
+// on message content blocks and drops the earlier ones. The latest breakpoints
+// cover the longest prefix, so they are the ones worth keeping. It reports
+// whether it removed any.
+func capPreservedCacheMarkers(body map[string]any) bool {
+	msgs, ok := body["messages"].([]any)
+	if !ok {
+		return false
+	}
+	var marked []map[string]any
+	for _, msg := range msgs {
+		m, ok := msg.(map[string]any)
+		if !ok {
+			continue
+		}
+		blocks, ok := m["content"].([]any)
+		if !ok {
+			continue
+		}
+		for _, b := range blocks {
+			if block, ok := b.(map[string]any); ok && block["cache_control"] != nil {
+				marked = append(marked, block)
+			}
+		}
+	}
+	excess := len(marked) - maxCacheMarkers
+	if excess <= 0 {
+		return false
+	}
+	for _, block := range marked[:excess] {
+		delete(block, "cache_control")
+	}
+	return true
 }
