@@ -151,6 +151,11 @@ func ProvideServer(p ServerParams) *http.Server {
 				startIdleWatcher(shutdown.Context(), tracker, p.CLIParams.IdleTimeout, shutdown.RequestStop)
 				log.Printf("[idle] auto-shutdown enabled timeout=%s", p.CLIParams.IdleTimeout)
 			}
+			// free-pi's ad creatives are fetched in the background so the
+			// banner is already there when a connection page is opened. This
+			// warms the cache only — the impression is still fired by the
+			// render event, never by this loop.
+			dashboard.StartFreePiAdPrefetch(shutdown.Context(), p.Repo)
 			// The tamper-evident audit trail: one writer goroutine, a bounded
 			// queue, and the retention sweeper when a window is configured.
 			// It is started here rather than in a provider because it must run
