@@ -7,6 +7,7 @@
   "match": {
     "outputTypes": ["docker-ps"],
     "commands": ["^docker\\s+ps\\b"],
+    "strongPatterns": ["^CONTAINER ID\\s+IMAGE\\s+COMMAND"],
     "patterns": ["^CONTAINER ID\\s+IMAGE\\s+COMMAND"]
   },
   "rules": {

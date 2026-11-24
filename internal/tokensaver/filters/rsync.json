@@ -7,6 +7,7 @@
   "match": {
     "outputTypes": ["rsync"],
     "commands": ["^rsync\\b"],
+    "strongPatterns": ["^sending incremental file list"],
     "patterns": ["^sending incremental file list", "^rsync error:"]
   },
   "rules": {

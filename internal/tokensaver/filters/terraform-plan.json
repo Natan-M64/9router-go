@@ -7,6 +7,7 @@
   "match": {
     "outputTypes": [],
     "commands": ["^terraform\\s+plan\\b"],
+    "strongPatterns": ["Terraform will perform the following actions"],
     "patterns": ["Terraform will perform the following actions", "Plan: \\d+ to add"]
   },
   "rules": {

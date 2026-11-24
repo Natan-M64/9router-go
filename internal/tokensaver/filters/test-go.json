@@ -7,6 +7,7 @@
   "match": {
     "outputTypes": ["test-go"],
     "commands": ["^go\\s+test\\b"],
+    "strongPatterns": ["^--- FAIL: \\w+ \\("],
     "patterns": ["^--- FAIL:", "^(?-i:ok|FAIL)\\s+"]
   },
   "rules": {

@@ -109,3 +109,30 @@ func TestSelectionPatternsAreCaseSensitive(t *testing.T) {
 		t.Error("the shared list compiler must stay case-insensitive")
 	}
 }
+
+// A strong pattern is a multi-word line a command prints and prose does not, so
+// one match is enough. These are short outputs that carry only that line.
+func TestStrongPatternSelectsOnItsOwn(t *testing.T) {
+	cfg := DefaultRTKConfig()
+	cases := map[string]struct{ text, want string }{
+		"minimal git diff": {"diff --git a/foo.go b/foo.go\n--- a/foo.go\n+++ b/foo.go\n@@ -1 +1 @@\n-old\n+new", "git-diff"},
+		"docker ps":        {"CONTAINER ID   IMAGE     COMMAND   CREATED\nabc123         nginx     \"nginx\"   1m ago\n", "docker-ps"},
+		"terraform plan":   {"Terraform will perform the following actions:\n  # aws_instance.a will be created\n", "terraform-plan"},
+		"go test failure":  {"--- FAIL: TestX (0.00s)\n    x_test.go:9: boom\n", "test-go"},
+	}
+	for name, c := range cases {
+		if f := MatchFilter(c.text, "", cfg); f == nil || f.ID != c.want {
+			t.Errorf("%s: filter = %v, want %s", name, f, c.want)
+		}
+	}
+}
+
+// The same words inside prose, not at the start of a line, are not a signature.
+func TestStrongPatternIgnoresProse(t *testing.T) {
+	cfg := DefaultRTKConfig()
+	prose := "To compare, run `git diff --git` and look at the header.\n" +
+		"The docs say: On branch names, keep them short.\n"
+	if f := MatchFilter(prose, "", cfg); f != nil && f.ID != "generic-output" {
+		t.Errorf("prose selected the %s filter", f.ID)
+	}
+}

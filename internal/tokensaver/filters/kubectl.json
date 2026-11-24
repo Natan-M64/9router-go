@@ -9,6 +9,7 @@
     "commands": [
       "^kubectl\\s+(?:get|describe|apply|delete|rollout|events?)\\b"
     ],
+    "strongPatterns": ["NAME\\s+READY\\s+STATUS"],
     "patterns": [
       "NAME\\s+READY\\s+STATUS",
       "NAME\\s+TYPE\\s+CLUSTER-IP",

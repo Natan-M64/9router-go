@@ -7,6 +7,7 @@
   "match": {
     "outputTypes": [],
     "commands": ["^tofu\\s+plan\\b"],
+    "strongPatterns": ["OpenTofu will perform the following actions"],
     "patterns": ["OpenTofu will perform the following actions", "Plan: \\d+ to add"]
   },
   "rules": {

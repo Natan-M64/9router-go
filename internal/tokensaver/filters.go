@@ -30,10 +30,11 @@ type RawFilterMatch struct {
 	Commands    []string `json:"commands"`
 	Patterns    []string `json:"patterns"`
 	OutputTypes []string `json:"outputTypes"`
-	// MinPatternHits overrides how many distinct patterns must match before the
-	// content alone selects the filter (default minContentPatternHits). A filter
-	// whose single pattern is an unmistakable signature sets it to 1.
-	MinPatternHits int `json:"minPatternHits"`
+	// StrongPatterns are signatures specific enough that one match selects the
+	// filter on its own: a multi-word line a command prints and prose does not
+	// ("diff --git ", "CONTAINER ID  IMAGE  COMMAND"). Patterns not listed here
+	// need minContentPatternHits distinct matches.
+	StrongPatterns []string `json:"strongPatterns"`
 }
 
 type RawFilterRules struct {
@@ -70,7 +71,7 @@ type RTKFilter struct {
 	Priority         int
 	Commands         []*regexp.Regexp
 	Patterns         []*regexp.Regexp
-	MinPatternHits   int
+	StrongPatterns   []*regexp.Regexp
 	IncludePatterns  []*regexp.Regexp
 	DropPatterns     []*regexp.Regexp
 	CollapsePatterns []*regexp.Regexp
@@ -233,7 +234,7 @@ func LoadFilters() []*RTKFilter {
 				Priority:         raw.Priority,
 				Commands:         compileRegexList(raw.Match.Commands),
 				Patterns:         compileSelectionList(raw.Match.Patterns),
-				MinPatternHits:   raw.Match.MinPatternHits,
+				StrongPatterns:   compileSelectionList(raw.Match.StrongPatterns),
 				IncludePatterns:  compileRegexList(raw.Rules.IncludePatterns),
 				DropPatterns:     compileRegexList(raw.Rules.DropPatterns),
 				CollapsePatterns: compileRegexList(raw.Rules.CollapsePatterns),
@@ -429,15 +430,16 @@ func MatchFilter(text string, command string, cfg RTKConfig) *RTKFilter {
 		// a ping summary) and stops a file or a web page from being rewritten
 		// as the output of a tool it never came from. A filter with a single
 		// pattern is selected by its command only.
-		need := f.MinPatternHits
-		if need <= 0 {
-			need = minContentPatternHits
+		for _, strongRe := range f.StrongPatterns {
+			if strongRe.MatchString(text) {
+				return f
+			}
 		}
 		hits := 0
 		for _, patRe := range f.Patterns {
 			if patRe.MatchString(text) {
 				hits++
-				if hits >= need {
+				if hits >= minContentPatternHits {
 					return f
 				}
 			}
