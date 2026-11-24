@@ -56,7 +56,7 @@ func TestRTKCacheResultIsIsolatedFromCallers(t *testing.T) {
 	cfg := DefaultRTKConfig()
 	a := CompressTextDetailedWithCommand(text, "", cfg)
 	if len(a.TechniquesUsed) == 0 {
-		t.Skip("no techniques recorded to mutate")
+		t.Fatal("the fixture records no techniques, so this test would prove nothing")
 	}
 	a.TechniquesUsed[0] = "tampered"
 	b := CompressTextDetailedWithCommand(text, "", cfg)
@@ -119,4 +119,47 @@ func TestRTKCacheIsSafeUnderConcurrentUse(t *testing.T) {
 		}(g)
 	}
 	wg.Wait()
+}
+
+// Every configuration field that can change the output must change the key, or
+// two settings would share a cached answer. A nil and an empty map are the same
+// setting and must share one.
+func TestRTKCacheKeyCoversEveryConfigToggle(t *testing.T) {
+	text := bigToolText(300)
+	base := DefaultRTKConfig()
+	key := func(c RTKConfig) rtkCacheKey {
+		k, ok := rtkCacheKeyFor(text, "", c)
+		if !ok {
+			t.Fatal("config not serialisable")
+		}
+		return k
+	}
+	want := key(base)
+
+	variants := map[string]func(c *RTKConfig){
+		"deduplicate off":  func(c *RTKConfig) { c.Deduplicate = false },
+		"max chars":        func(c *RTKConfig) { c.MaxChars = 123 },
+		"mode":             func(c *RTKConfig) { c.Mode = "advance" },
+		"intensity":        func(c *RTKConfig) { c.Intensity = "aggressive" },
+		"category toggled": func(c *RTKConfig) { c.Categories = map[string]bool{"git": false} },
+		"filter toggled":   func(c *RTKConfig) { c.Filters = map[string]bool{"gh": false} },
+	}
+	for name, mutate := range variants {
+		c := base
+		c.Categories = map[string]bool{}
+		for k, v := range base.Categories {
+			c.Categories[k] = v
+		}
+		mutate(&c)
+		if key(c) == want {
+			t.Errorf("%s did not change the cache key", name)
+		}
+	}
+
+	nilFilters, emptyFilters := base, base
+	nilFilters.Filters = nil
+	emptyFilters.Filters = map[string]bool{}
+	if key(nilFilters) != key(emptyFilters) {
+		t.Error("a nil and an empty Filters map must share a key")
+	}
 }
