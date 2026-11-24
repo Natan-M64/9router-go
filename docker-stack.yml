@@ -9,53 +9,25 @@ services:
     volumes:
       - 9router_data:/data
     environment:
-      # --- Server & Network ---
+      # Server & Network
       PORT: "${PORT:-20130}"
       HOST: "${HOST:-0.0.0.0}"
       TZ: "${TZ:-UTC}"
 
-      # --- Storage & Database ---
-      # SQLite is used by default under DATA_DIR/db/data.sqlite.
-      # Set DATABASE_URL (postgres://...) to use PostgreSQL instead.
+      # Storage & Database (SQLite by default; set DATABASE_URL for PostgreSQL)
       DATA_DIR: "${DATA_DIR:-/data}"
       DB_PATH: "${DB_PATH:-}"
       DATABASE_URL: "${DATABASE_URL:-}"
       DB_MAX_CONNS: "${DB_MAX_CONNS:-50}"
       DB_MAX_IDLE_CONNS: "${DB_MAX_IDLE_CONNS:-10}"
 
-      # --- Security & Auth ---
-      # Strongly recommended: set persistent values in your stack env / secrets.
+      # Security & Auth (set persistent values in your stack env / secrets)
       JWT_SECRET: "${JWT_SECRET:-}"
       INITIAL_PASSWORD: "${INITIAL_PASSWORD:-}"
       ROUTER_MASTER_KEY: "${ROUTER_MASTER_KEY:-}"
-      API_KEY_SECRET: "${API_KEY_SECRET:-}"
-      MACHINE_ID_SALT: "${MACHINE_ID_SALT:-}"
 
-      # --- Token Saver & Prompt Features ---
-      RTK_ENABLED: "${RTK_ENABLED:-true}"
-      CAVEMAN_ENABLED: "${CAVEMAN_ENABLED:-false}"
-      PONYTAIL_ENABLED: "${PONYTAIL_ENABLED:-false}"
-      ADHD_ENABLED: "${ADHD_ENABLED:-false}"
-      INJECTION_GUARD_DISABLED: "${INJECTION_GUARD_DISABLED:-false}"
-
-      # --- Routing & Resilience ---
-      FORCE_FALLBACK_ON_ALL_UNAVAILABLE: "${FORCE_FALLBACK_ON_ALL_UNAVAILABLE:-false}"
-      STRICT_SSL: "${STRICT_SSL:-false}"
-      ALLOW_PRIVATE_NETWORKING: "${ALLOW_PRIVATE_NETWORKING:-true}"
-      SEAT_ATTEMPT_BUDGET_MS: "${SEAT_ATTEMPT_BUDGET_MS:-0}"
-      KIRO_INTEGRITY_GATE: "${KIRO_INTEGRITY_GATE:-}"
-
-      # --- Outbound Proxy (optional) ---
-      HTTP_PROXY: "${HTTP_PROXY:-}"
-      HTTPS_PROXY: "${HTTPS_PROXY:-}"
-      ALL_PROXY: "${ALL_PROXY:-}"
-      NO_PROXY: "${NO_PROXY:-}"
-
-      # --- Runtime & Observability ---
+      # Container runtime default (manage app settings in the Dashboard)
       AUTO_UPDATE: "${AUTO_UPDATE:-false}"
-      LOG_FILE: "${LOG_FILE:-}"
-      OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
-      OTEL_SERVICE_NAME: "${OTEL_SERVICE_NAME:-9router-go}"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${PORT:-20130}/health >/dev/null 2>&1 || exit 1"]
       interval: 30s
