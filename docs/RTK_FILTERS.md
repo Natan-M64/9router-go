@@ -13,6 +13,8 @@ Code: `internal/tokensaver/filters.go` (`MatchFilter`, `LoadFilters`), `rtk.go` 
 3. **By content.** Only when the command does not settle it. Filters that declare `commands` are skipped when the command is known. When the command is empty (an MCP result, a fetched page, a read through a wrapper), every enabled filter is a candidate. A filter is chosen if **one** of its `strongPatterns` matches, **or** if **at least two distinct patterns** of `match.patterns` match.
 4. **`generic-output`** is the last resort.
 
+The published wiki (`wiki/token-saver.md`, "What it protects") lists "the filter is chosen by the **command** that produced the output, not by its content" as an invariant. Selection by content exists as a fallback for results whose command cannot be resolved (MCP results, fetched pages), and the rules below are what keep it from breaking that invariant for ordinary text.
+
 Selection by content is the only path that can go wrong on text that never came from a command, and it is the one that needs care. RTK picks the filter **before** it strips ANSI colours, so patterns have to tolerate `\x1b[...m` and indentation when the tool prints them.
 
 ## Rules for writing selection patterns
