@@ -179,7 +179,7 @@ ci-local: web-build
 	@echo "== [3/5] frontend unit tests =="
 	cd web && bun test src scripts
 	@echo "== [4/5] go vet =="
-	go vet ./...
+	$(MAKE) vet
 	@echo "== [5/5] go unit tests (-count=1, as CI) =="
 	go test -count=1 ./...
 	@echo "ci-local: all gates passed"

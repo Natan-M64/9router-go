@@ -150,13 +150,10 @@ func parametersField(m map[string]any, key string) any {
 	return map[string]any{"type": "object", "properties": map[string]any{}}
 }
 
-// maxCacheMarkers is how many cache_control breakpoints one request may carry.
-// Anthropic answers a fifth with a 400, and a gateway that forwards the markers
-// (OpenRouter, the Alibaba gateways) passes that on.
-const maxCacheMarkers = 4
-
-// capPreservedCacheMarkers keeps the last maxCacheMarkers cache_control markers
-// on message content blocks and drops the earlier ones. The latest breakpoints
+// capPreservedCacheMarkers keeps the last cacheControlMarkerBudget cache_control
+// markers on message content blocks and drops the earlier ones. Anthropic
+// answers a fifth with a 400, and a gateway that forwards the markers
+// (OpenRouter, the Alibaba gateways) passes that on. The latest breakpoints
 // cover the longest prefix, so they are the ones worth keeping. It reports
 // whether it removed any.
 func capPreservedCacheMarkers(body map[string]any) bool {
@@ -180,7 +177,7 @@ func capPreservedCacheMarkers(body map[string]any) bool {
 			}
 		}
 	}
-	excess := len(marked) - maxCacheMarkers
+	excess := len(marked) - cacheControlMarkerBudget
 	if excess <= 0 {
 		return false
 	}
