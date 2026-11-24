@@ -1,0 +1,4 @@
+### perf(gemini): skip the rejected first attempt once a conversation is known to need the moved systemInstruction
+
+- On large Antigravity requests the first attempt could come back with a bare `RESOURCE_EXHAUSTED`, and the gateway retried with the systemInstruction moved into `contents[0]`. After such a retry succeeds, the gateway now remembers the model, project, conversation and body size for 15 minutes and sends the next body of at least that size already moved, which saves the rejected round trip (1 to 2.5 s measured). Smaller bodies keep their systemInstruction; if the moved shape is refused the memory is dropped and the regular shape is sent in the same call; a request without a session identity learns nothing.
+- The trigger of the rejection was not isolated, so the benefit on real traffic is not yet confirmed.
