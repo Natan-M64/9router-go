@@ -66,7 +66,7 @@ GOAMD64 ?= v1
 export CGO_ENABLED
 export GOAMD64
 
-.PHONY: build run dev version update test test-short test-live test-integration vet vet-integration bench bench-go cross mitm-enable mitm-disable mitm-status docker docker-build clean help web-build web-dev changelog-merge
+.PHONY: build run dev version update test test-short ci-local test-live test-integration vet vet-integration bench bench-go cross mitm-enable mitm-disable mitm-status docker docker-build clean help web-build web-dev changelog-merge
 
 ## web-build — build frontend static assets (Svelte/Vite) into web/dist
 #
@@ -169,6 +169,20 @@ test:
 ## test-short — run tests (quiet)
 test-short:
 	go test ./...
+
+## ci-local — run the CI gates that apply to this machine, in CI order, before pushing
+ci-local: web-build
+	@echo "== [1/5] frontend lint (oxlint) =="
+	cd web && bunx oxlint --deny-warnings
+	@echo "== [2/5] svelte-check ratchet =="
+	cd web && bun run ratchet:svelte
+	@echo "== [3/5] frontend unit tests =="
+	cd web && bun test src scripts
+	@echo "== [4/5] go vet =="
+	go vet ./...
+	@echo "== [5/5] go unit tests (-count=1, as CI) =="
+	go test -count=1 ./...
+	@echo "ci-local: all gates passed"
 
 # test-race runs the same command as CI's Race detector job. -race needs cgo,
 # so it stays out of `test` and `test-short`: a toolchain without a C compiler
