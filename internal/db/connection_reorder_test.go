@@ -27,6 +27,17 @@ func seedOrderedConnections(t *testing.T, repo *Repo, provider string, seedOrder
 			t.Fatalf("set priority %s: %v", id, err)
 		}
 	}
+	// Pin every row to one updatedAt. The pool orders ties by updatedAt DESC,
+	// then id ASC, and updatedAt has one-second resolution: left to the wall
+	// clock, two rows seeded across a second boundary rank by time, and the
+	// tie case flakes (seen in CI as [b c a] instead of [b a c]). A shared
+	// timestamp makes the tie-break fall to id, the order these tests assert.
+	if _, err := repo.db.Exec(
+		`UPDATE providerConnections SET updatedAt = ? WHERE provider = ?`,
+		"2026-01-01T00:00:00Z", provider,
+	); err != nil {
+		t.Fatalf("pin updatedAt for %s: %v", provider, err)
+	}
 }
 
 // rankedPool reads the pool back and asserts it carries a distinct contiguous
