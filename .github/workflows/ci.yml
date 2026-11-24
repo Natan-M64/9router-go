@@ -3,6 +3,14 @@ name: CI
 on:
   push:
     branches: [main]
+    # Docs-only pushes skip the full pipeline (~15 min, 11 jobs). Pull requests
+    # are not filtered, so a required check still reports on every PR.
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "wiki/**"
+      - "screenshots/**"
+      - "site/**"
   pull_request:
     branches: [main]
 
