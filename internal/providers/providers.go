@@ -520,9 +520,14 @@ var KnownProviders = map[string]ProviderConfig{
 		AuthHeader:     "Authorization",
 		AuthScheme:     "bearer",
 		ThinkingFormat: "openai",
-		ImageURL:       "https://openrouter.ai/api/v1/images/generations",
-		VideoURL:       "https://openrouter.ai/api/v1/videos",
-		SystemoneURL:   "https://openrouter.ai/api/v1/systemone",
+		// Deliberate divergence from upstream's quirk list: OpenRouter documents
+		// block-level cache_control (up to four breakpoints, ttl 5m or 1h) for
+		// Anthropic models and translates it for others, so stripping the
+		// markers a client sent only throws the cache hit away.
+		PreserveCacheControl: true,
+		ImageURL:             "https://openrouter.ai/api/v1/images/generations",
+		VideoURL:             "https://openrouter.ai/api/v1/videos",
+		SystemoneURL:         "https://openrouter.ai/api/v1/systemone",
 		StaticHeaders: map[string]string{
 			"HTTP-Referer": "https://endpoint-proxy.local",
 			"X-Title":      "Endpoint Proxy",

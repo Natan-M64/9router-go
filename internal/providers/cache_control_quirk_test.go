@@ -8,12 +8,16 @@ import "testing"
 // gateways answer 400 when the markers are missing.
 func TestPreservesCacheControl(t *testing.T) {
 	registered := []string{"alicode", "alicode-intl", "alitp-intl", "alims-intl"}
+	// openrouter is not in upstream's list: it keeps the markers on purpose,
+	// because OpenRouter documents block-level cache_control for Anthropic
+	// models and a stripped marker is a lost cache hit, not a 400.
+	registered = append(registered, "openrouter")
 	for _, provider := range registered {
 		if !PreservesCacheControl(provider) {
 			t.Errorf("%s must keep the cache_control markers", provider)
 		}
 	}
-	for _, provider := range []string{"openai", "openrouter", "groq", "deepseek", "claude"} {
+	for _, provider := range []string{"openai", "groq", "deepseek", "claude"} {
 		if PreservesCacheControl(provider) {
 			t.Errorf("%s must not keep the cache_control markers", provider)
 		}
