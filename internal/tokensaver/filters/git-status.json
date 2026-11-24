@@ -7,7 +7,7 @@
   "match": {
     "outputTypes": ["git-status"],
     "commands": ["^git\\s+status\\b"],
-    "strongPatterns": ["^On branch "],
+    "strongPatterns": ["^On branch \\S+[ \\t]*\\r?$"],
     "patterns": ["^On branch ", "^Changes (?:not staged|to be committed)", "^Untracked files:"]
   },
   "rules": {

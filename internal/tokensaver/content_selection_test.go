@@ -136,3 +136,31 @@ func TestStrongPatternIgnoresProse(t *testing.T) {
 		t.Errorf("prose selected the %s filter", f.ID)
 	}
 }
+
+// A strong pattern is the shape the command prints, not a phrase that opens a
+// line. Prose that starts the same way is not claimed.
+func TestStrongPatternsNeedTheRealShape(t *testing.T) {
+	cfg := DefaultRTKConfig()
+	prose := []string{
+		"On branch protection rules, require two reviewers before merging.\n",
+		"diff --git is the header style that git prints for each file.\n",
+	}
+	for _, tx := range prose {
+		if f := MatchFilter(tx, "", cfg); f != nil && f.ID != "generic-output" {
+			t.Errorf("prose %q selected %s", tx, f.ID)
+		}
+	}
+	real := map[string]struct{ text, want string }{
+		"git status":      {"On branch main\n", "git-status"},
+		"git status crlf": {"On branch feature/x\r\nnothing to commit\r\n", "git-status"},
+		"git diff":        {"diff --git a/foo.go b/foo.go\nindex 1..2 100644\n", "git-diff"},
+		"go test ok":      {"ok  \tgithub.com/x/y\t0.312s\n", "test-go"},
+		"go test fail":    {"FAIL\tgithub.com/x/y\t0.012s\n", "test-go"},
+		"git branch crlf": {"  dev\r\n* main\r\n  feature\r\nAlready on 'main'\r\n", "git-branch"},
+	}
+	for name, c := range real {
+		if f := MatchFilter(c.text, "", cfg); f == nil || f.ID != c.want {
+			t.Errorf("%s: filter = %v, want %s", name, f, c.want)
+		}
+	}
+}
