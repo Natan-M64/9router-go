@@ -1,6 +1,6 @@
 services:
   9router-go:
-    image: ${GHCR_IMAGE:-ghcr.io/luqman-v1/9router-go}:${IMAGE_TAG:-latest}
+    image: ${GHCR_IMAGE:-ghcr.io/natan-m64/9router-go}:${IMAGE_TAG:-latest}
     ports:
       - target: 20130
         published: ${PORT:-20130}
