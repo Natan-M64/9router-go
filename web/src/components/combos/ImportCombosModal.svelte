@@ -108,7 +108,7 @@
   }
 </script>
 
-<Modal isOpen={isOpen} onClose={resetAndClose} title="Import Combos (JSON / OmniRoute)" maxWidth="lg">
+<Modal isOpen={isOpen} onClose={resetAndClose} title="Import Combos (JSON / OmniRoute)" size="lg">
   <div class="flex flex-col gap-4">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <p class="text-xs text-text-muted">

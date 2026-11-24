@@ -838,5 +838,5 @@ async function handleSetContextWindow(combo: Combo, contextWindow: number) {
   isOpen={isImportOpen}
   existingCombos={llmCombos}
   onClose={() => (isImportOpen = false)}
-  onImported={loadData}
+  onImported={onRefresh}
 />
