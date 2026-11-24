@@ -32,6 +32,13 @@ func ForwardGemini(ctx context.Context, client *http.Client, cfg *providers.Prov
 	}
 
 	var sendBody []byte
+	// origSendBody and premoved serve the learned-shape shortcut: when the memo
+	// says a body this large needs the systemInstruction moved, sendBody carries
+	// the moved shape and origSendBody keeps the regular one to fall back on.
+	var origSendBody []byte
+	var geminiSize int
+	premoved := false
+	shape := shapeKey{model: modelName, project: projectID, session: handlerutil.GetSessionID(ctx)}
 	if projectID != "" && translator.IsAntigravityImageModel(modelName) {
 		isStream = false
 		cleanModel, aspectRatio := translator.ParseImageConfig(modelName)
@@ -92,6 +99,15 @@ func ForwardGemini(ctx context.Context, client *http.Client, cfg *providers.Prov
 				return nil, fmt.Errorf("wrap for antigravity: %w", err)
 			}
 			sendBody = wrapped
+			geminiSize = len(geminiBody)
+			if movedSystemInstructions.shouldMove(shape, geminiSize) {
+				if moved, ok := translator.MoveSystemInstructionToContents(geminiBody); ok {
+					if rewrapped, werr := translator.WrapForAntigravity(moved, projectID, modelName, sessID); werr == nil {
+						origSendBody, sendBody, premoved = wrapped, rewrapped, true
+						log.Info("gemini", "sending systemInstruction moved to contents[0] (learned for this conversation)", "model", modelName, "body_bytes", geminiSize)
+					}
+				}
+			}
 		}
 	}
 
@@ -140,25 +156,51 @@ func ForwardGemini(ctx context.Context, client *http.Client, cfg *providers.Prov
 		headers["X-Goog-Api-Client"] = translator.GeminiCLIApiClient
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", requestURL, bytes.NewReader(sendBody))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
+	send := func(payload []byte) (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, "POST", requestURL, bytes.NewReader(payload))
+		if err != nil {
+			return nil, fmt.Errorf("create request: %w", err)
+		}
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, err
+			}
+			if isTransientGeminiTransportError(err) {
+				return nil, UpstreamFailure(http.StatusBadGateway, fmt.Sprintf("ForwardGemini antigravity transport: %v", err))
+			}
+			return nil, fmt.Errorf("upstream request: %w", err)
+		}
+		UnwrapIdentityGzip(req, resp)
+		return resp, nil
 	}
 
-	resp, err := client.Do(req)
+	resp, err := send(sendBody)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, err
-		}
-		if isTransientGeminiTransportError(err) {
-			return nil, UpstreamFailure(http.StatusBadGateway, fmt.Sprintf("ForwardGemini antigravity transport: %v", err))
-		}
-		return nil, fmt.Errorf("upstream request: %w", err)
+		return nil, err
 	}
-	UnwrapIdentityGzip(req, resp)
+	if premoved {
+		if resp.StatusCode == http.StatusOK {
+			// Still right: keep the memory alive.
+			movedSystemInstructions.remember(shape, geminiSize)
+		} else {
+			// The moved shape was refused, so what was learned is wrong. Forget it
+			// and send the regular shape, which is what would have gone out
+			// without the shortcut.
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, constants.UpstreamErrLimit))
+			_ = resp.Body.Close()
+			movedSystemInstructions.forget(shape)
+			log.Warn("gemini", "moved systemInstruction was refused; sending the regular shape", "model", modelName, "status", resp.StatusCode)
+			premoved = false
+			resp, err = send(origSendBody)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 
 	// 429 fallback: when the Antigravity backend answers a bare
 	// RESOURCE_EXHAUSTED (no QUOTA_EXHAUSTED / RATE_LIMIT_EXCEEDED /
@@ -186,6 +228,9 @@ func ForwardGemini(ctx context.Context, client *http.Client, cfg *providers.Prov
 							if respRetry, derr := client.Do(reqRetry); derr == nil {
 								UnwrapIdentityGzip(reqRetry, respRetry)
 								if respRetry.StatusCode == http.StatusOK {
+									// Remember how large a body needed this, so the next one
+									// at least that large skips the rejected first attempt.
+									movedSystemInstructions.remember(shape, geminiSize)
 									return respRetry, nil
 								}
 								errBodyRetry, _ := io.ReadAll(io.LimitReader(respRetry.Body, constants.UpstreamErrLimit))
