@@ -833,8 +833,12 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 					pipedBody = out
 				}
 			}
-			pipedBody = translator.AnchorClaudeCacheWithTTL(pipedBody, h.claudeCacheTTL())
 		}
+		// Anchor every Claude-bound body, not only OAuth ones: a translated
+		// OpenAI-format request sent with an API key otherwise reaches Anthropic
+		// with no cache_control breakpoint at all. Runs after cloaking so the
+		// anchor lands on the final system/tools shape.
+		pipedBody = translator.AnchorClaudeCacheWithTTL(pipedBody, h.claudeCacheTTL())
 	}
 
 	if isAnthropic || upstreamClaude {
@@ -1673,15 +1677,20 @@ func (h *ChatHandler) applyTokenSavers(ctx context.Context, body []byte, claudeN
 	// count the earlier persona's bytes a second time.
 	beforeLen := len(out)
 	if h.TokenSaver.CavemanEnabled() {
-		bypass := false
-		if h.TokenSaver.CavemanAutoClarity() && tokensaver.ShouldBypassCaveman(out) {
-			bypass = true
+		// Auto-Clarity never removes the caveman system prompt: dropping it on a
+		// bypass turn changes the cached prefix from the system onward. A bypass
+		// turn only adds a clarity note to the tail user message, so the system
+		// prompt, tools and earlier turns stay byte-identical.
+		bypass := h.TokenSaver.CavemanAutoClarity() && tokensaver.ShouldBypassCaveman(out)
+		prompt := tokensaver.GetCavemanPromptWithLang(h.TokenSaver.CavemanLevel(), h.TokenSaver.CavemanLanguage())
+		if next, did := inject(out, prompt); did {
+			out = next
+			recordPersonaInjection(&origTokens, &savedTokens, beforeLen, len(next))
+			beforeLen = len(out)
 		}
-		if !bypass {
-			prompt := tokensaver.GetCavemanPromptWithLang(h.TokenSaver.CavemanLevel(), h.TokenSaver.CavemanLanguage())
-			if next, did := inject(out, prompt); did {
+		if bypass {
+			if next, did := tokensaver.AppendTailUserNote(out, tokensaver.CavemanClarityNote); did {
 				out = next
-				recordPersonaInjection(&origTokens, &savedTokens, beforeLen, len(next))
 				beforeLen = len(out)
 			}
 		}

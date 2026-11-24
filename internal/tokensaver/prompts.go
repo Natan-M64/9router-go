@@ -398,3 +398,65 @@ func toMessageArray(v any) []any {
 	}
 	return arr
 }
+
+// CavemanClarityNote is appended to the tail user message on a turn where
+// Auto-Clarity bypasses terse output (destructive commands, security risks,
+// explicit detail requests). It overrides the brevity rules for that one reply
+// only. The system prompt stays untouched, so the cached prefix survives.
+const CavemanClarityNote = "[Clarity override for this reply only: ignore the terse-output rules above. Give a complete, clear explanation, and state every security or destructive-operation risk in full sentences.]"
+
+// AppendTailUserNote appends note to the most recent user message of an
+// OpenAI or Claude messages[] body. Only that message changes; the system
+// prompt, tools and earlier turns stay byte-identical, which keeps the
+// upstream prefix cache warm across a bypass toggle.
+//
+// It returns the body unchanged and false when there is no user message, the
+// content shape is unknown, or the note is already the message's last text.
+func AppendTailUserNote(body []byte, note string) ([]byte, bool) {
+	var req map[string]any
+	if err := json.Unmarshal(body, &req); err != nil {
+		return body, false
+	}
+	arr := toMessageArray(req["messages"])
+	for i := len(arr) - 1; i >= 0; i-- {
+		m, ok := arr[i].(map[string]any)
+		if !ok {
+			continue
+		}
+		if role, _ := m["role"].(string); role != "user" {
+			continue
+		}
+		switch c := m["content"].(type) {
+		case string:
+			if strings.HasSuffix(c, note) {
+				return body, false
+			}
+			m["content"] = c + "\n\n" + note
+		case []any:
+			if last, ok := lastTextBlock(c); ok && strings.HasSuffix(last, note) {
+				return body, false
+			}
+			m["content"] = append(append([]any{}, c...), map[string]any{"type": "text", "text": note})
+		default:
+			return body, false
+		}
+		out, err := json.Marshal(req, json.Deterministic(true))
+		if err != nil {
+			return body, false
+		}
+		return out, true
+	}
+	return body, false
+}
+
+// lastTextBlock returns the text of the final text block in a content array.
+func lastTextBlock(blocks []any) (string, bool) {
+	for i := len(blocks) - 1; i >= 0; i-- {
+		if b, ok := blocks[i].(map[string]any); ok {
+			if t, ok := b["text"].(string); ok {
+				return t, true
+			}
+		}
+	}
+	return "", false
+}

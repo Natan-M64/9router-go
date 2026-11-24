@@ -1140,7 +1140,12 @@ func AnchorClaudeCacheWithTTL(body []byte, ttl string) []byte {
 		}
 	}
 
-	// 3. Head anchor for system prompt
+	// 3. Head anchor for system prompt. A plain-string system cannot carry
+	//    cache_control, so it is promoted to one text block first; the Messages
+	//    API accepts either shape and the cached prefix is otherwise lost.
+	if s, ok := req["system"].(string); ok && s != "" {
+		req["system"] = []any{map[string]any{"type": "text", "text": s}}
+	}
 	if sys, ok := req["system"].([]any); ok && len(sys) > 0 {
 		lastSys := len(sys) - 1
 		for i, sb := range sys {
