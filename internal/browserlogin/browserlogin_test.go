@@ -123,8 +123,8 @@ func TestReadSessionNeedsBothSessionCookies(t *testing.T) {
 // DISPLAY/WAYLAND_DISPLAY, but a browser can still open a window if it is
 // handed the socket the session actually listens on.
 func TestResolveDisplayEnvFillsWayland(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("session sockets are a unix concept")
+	if runtime.GOOS != "linux" {
+		t.Skip("session-socket discovery is linux-only: resolveDisplayEnv returns early elsewhere")
 	}
 	t.Setenv("DISPLAY", "")
 	t.Setenv("WAYLAND_DISPLAY", "")
@@ -196,8 +196,8 @@ func TestEnvNamesDisplay(t *testing.T) {
 // process environment but a live Wayland socket, the resolved environment
 // names a display and the launch must proceed to the browser, not refuse.
 func TestResolveDisplayEnvSatisfiesTheLaunchGate(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("session sockets are a unix concept")
+	if runtime.GOOS != "linux" {
+		t.Skip("session-socket discovery is linux-only: resolveDisplayEnv returns early elsewhere")
 	}
 	t.Setenv("DISPLAY", "")
 	t.Setenv("WAYLAND_DISPLAY", "")
@@ -209,5 +209,25 @@ func TestResolveDisplayEnvSatisfiesTheLaunchGate(t *testing.T) {
 
 	if !envNamesDisplay(resolveDisplayEnv()) {
 		t.Fatal("a discovered session socket must satisfy the launch gate")
+	}
+}
+
+// Off Linux the session socket is never consulted, so a socket in
+// XDG_RUNTIME_DIR must not invent a display. This is the counterpart to the
+// Linux tests above, and it is what runs on macOS and Windows.
+func TestResolveDisplayEnvAddsNothingOffLinux(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("the Linux discovery tests above cover this platform")
+	}
+	t.Setenv("DISPLAY", "")
+	t.Setenv("WAYLAND_DISPLAY", "")
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "wayland-0"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_RUNTIME_DIR", dir)
+
+	if envNamesDisplay(resolveDisplayEnv()) {
+		t.Fatalf("resolveDisplayEnv invented a display on %s", runtime.GOOS)
 	}
 }

@@ -134,7 +134,7 @@ func TestResolveDataDirRejectsRelativeOverride(t *testing.T) {
 // The capability file's exact shape is the broker's identity: 43 base64url
 // characters and nothing else.
 func TestReadCapabilityRejectsWrongShape(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortTempDir(t)
 	run := filepath.Join(dir, "run")
 	if err := os.MkdirAll(run, 0o755); err != nil {
 		t.Fatal(err)
@@ -157,7 +157,7 @@ func TestReadCapabilityRejectsWrongShape(t *testing.T) {
 }
 
 func TestReadCapabilityAcceptsValid(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortTempDir(t)
 	path := filepath.Join(dir, capabilityFile)
 	if err := os.WriteFile(path, []byte(strings.Repeat("a", capabilityLen)+"\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -260,7 +260,7 @@ func startBroker(t *testing.T, handler func(req leaseRequest) leaseResponse) str
 	if isWindows() {
 		t.Skip("broker fixture uses a unix socket")
 	}
-	dir := t.TempDir()
+	dir := shortTempDir(t)
 	// Production resolves the socket under <dataDir>/run, the same directory
 	// the capability file lives in. A listener anywhere else is a fixture that
 	// dials a path nobody serves.
@@ -393,7 +393,7 @@ func TestLeaseSocketMissing(t *testing.T) {
 	if isWindows() {
 		t.Skip("broker fixture uses a unix socket")
 	}
-	dir := t.TempDir()
+	dir := shortTempDir(t)
 	runDir := filepath.Join(dir, "run")
 	if err := os.MkdirAll(runDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
@@ -671,4 +671,19 @@ func TestExchangeFrameHonoursCancelledContext(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want context.DeadlineExceeded", err)
 	}
+}
+
+// shortTempDir is t.TempDir() with a path short enough for a unix socket. The
+// socket lives at <dir>/run/mcode-auth-lease-v1.sock, and the kernel caps a
+// unix socket path at 104 bytes on macOS. t.TempDir() there sits under
+// /var/folders/…, which pushes the path past the cap and makes bind fail with
+// EINVAL, so the tests were refused before they reached the code they test.
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "mcl")
+	if err != nil {
+		t.Fatalf("mkdir short temp dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }
