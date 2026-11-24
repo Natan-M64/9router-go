@@ -107,3 +107,58 @@ func TestCompressTextAppliesARIASnapshot(t *testing.T) {
 		t.Fatalf("actionable node lost:\n%s", res.Text)
 	}
 }
+
+// Playwright prints link targets as "- /url: ..." children. They are nodes, so
+// parent and child are halved together and keep their relative depth.
+func TestCompactARIASnapshotKeepsURLChildDepth(t *testing.T) {
+	in := "- generic [ref=e1]:\n" +
+		"  - navigation [ref=e2]:\n" +
+		"    - link \"Home\" [ref=e3] [cursor=pointer]:\n" +
+		"      - /url: /home\n" +
+		"    - link \"Docs\" [ref=e4] [cursor=pointer]:\n" +
+		"      - /url: /docs\n" +
+		"  - button \"Go\" [ref=e5]\n" +
+		"  - img [ref=e6]\n"
+	out, did := compactARIASnapshot(in)
+	if !did {
+		t.Fatal("not compacted")
+	}
+	if !strings.Contains(out, "\n  - link \"Home\" [ref=e3] [cursor=pointer]:\n   - /url: /home\n") {
+		t.Fatalf("parent and /url child lost their relative depth:\n%s", out)
+	}
+}
+
+// A wrapper whose only child is a non-node continuation line still has a child.
+func TestCompactARIASnapshotKeepsWrapperWithContinuationLine(t *testing.T) {
+	in := "- generic [ref=e1]:\n" +
+		"    some continuation text\n" +
+		"- button \"a\" [ref=e2]\n- button \"b\" [ref=e3]\n- button \"c\" [ref=e4]\n- button \"d\" [ref=e5]\n"
+	out, _ := compactARIASnapshot(in)
+	if !strings.Contains(out, "generic [ref=e1]:") || !strings.Contains(out, "some continuation text") {
+		t.Fatalf("wrapper or its continuation line was dropped:\n%s", out)
+	}
+}
+
+// Indentation is left alone when halving could merge levels: an odd column, or
+// an indented line that is not a node.
+func TestCompactARIASnapshotDoesNotHalveWhenUnsafe(t *testing.T) {
+	odd := "- generic [ref=e1]:\n  - button \"a\" [ref=e2]\n   - button \"b\" [ref=e3]\n" +
+		"- button \"c\" [ref=e4]\n- button \"d\" [ref=e5]\n- img [ref=e6]\n"
+	out, _ := compactARIASnapshot(odd)
+	if !strings.Contains(out, "\n  - button \"a\"") || !strings.Contains(out, "\n   - button \"b\"") {
+		t.Fatalf("odd indentation was halved:\n%s", out)
+	}
+}
+
+// Fewer than five referenced nodes is not treated as a snapshot, and prose with
+// "[ref=" in it but no tree is left as it was.
+func TestCompactARIASnapshotNeedsEnoughRefs(t *testing.T) {
+	few := "- img [ref=e1]\n- button \"a\" [ref=e2]\n- img [ref=e3]\n"
+	if out, did := compactARIASnapshot(few); did || out != few {
+		t.Fatalf("a short text was rewritten (did=%v):\n%s", did, out)
+	}
+	prose := "see [ref=1] [ref=2] [ref=3] [ref=4] [ref=5] in the paper\n  - img\n"
+	if out, did := compactARIASnapshot(prose); did || out != prose {
+		t.Fatalf("prose was rewritten (did=%v):\n%s", did, out)
+	}
+}

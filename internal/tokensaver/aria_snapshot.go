@@ -10,7 +10,9 @@ import (
 //
 //   - button "Login" [ref=e5]
 //   - img [ref=e6]
-var ariaNodeRe = regexp.MustCompile(`^( *)- ([A-Za-z][\w-]*)(.*)$`)
+//
+// A role may start with "/" for the property children such as "- /url: ...".
+var ariaNodeRe = regexp.MustCompile(`^( *)- ([A-Za-z/][\w/-]*)(.*)$`)
 
 // ariaRefRe is the element reference an agent passes back to click or type. A
 // snapshot without references is not one an agent acts on, so it is left alone.
@@ -31,6 +33,7 @@ var ariaDecorativeRoles = map[string]bool{
 
 type ariaLine struct {
 	node   bool
+	blank  bool
 	indent int
 	role   string
 	rest   string
@@ -60,6 +63,8 @@ func compactARIASnapshot(text string) (string, bool) {
 	for i, l := range raw {
 		m := ariaNodeRe.FindStringSubmatch(l)
 		if m == nil {
+			trimmed := strings.TrimLeft(l, " ")
+			lines[i] = ariaLine{blank: strings.TrimSpace(l) == "", indent: len(l) - len(trimmed)}
 			continue
 		}
 		lines[i] = ariaLine{node: true, indent: len(m[1]), role: m[2], rest: m[3]}
@@ -89,7 +94,7 @@ func compactARIASnapshot(text string) (string, bool) {
 		}
 	}
 
-	halve := ariaSmallestStep(lines, removed) == 2
+	halve := ariaCanHalve(lines, removed)
 	out := make([]string, 0, len(raw))
 	for i, l := range raw {
 		if removed[i] {
@@ -115,28 +120,35 @@ func ariaEmptyRest(rest string) bool {
 }
 
 // ariaHasLiveChild reports whether the node at i still has a kept child: the
-// next kept line is a node indented deeper than it.
+// next kept non-blank line is indented deeper than it, whether it is a node or
+// a continuation line.
 func ariaHasLiveChild(lines []ariaLine, removed []bool, i int) bool {
 	for j := i + 1; j < len(lines); j++ {
-		if removed[j] {
+		if removed[j] || lines[j].blank {
 			continue
 		}
-		return lines[j].node && lines[j].indent > lines[i].indent
+		return lines[j].indent > lines[i].indent
 	}
 	return false
 }
 
-// ariaSmallestStep is the smallest positive indentation among the kept nodes,
-// or 0 when there is none.
-func ariaSmallestStep(lines []ariaLine, removed []bool) int {
+// ariaCanHalve reports whether halving the indentation keeps the tree intact:
+// the smallest step among the kept nodes is exactly two, every kept node sits on
+// an even column, and no kept continuation line is indented (halving only the
+// nodes would leave such a line at the wrong depth). A second pass finds a step
+// of one and leaves the text alone.
+func ariaCanHalve(lines []ariaLine, removed []bool) bool {
 	step := 0
 	for i, l := range lines {
-		if removed[i] || !l.node || l.indent <= 0 {
+		if removed[i] || l.blank || l.indent <= 0 {
 			continue
+		}
+		if !l.node || l.indent%2 != 0 {
+			return false
 		}
 		if step == 0 || l.indent < step {
 			step = l.indent
 		}
 	}
-	return step
+	return step == 2
 }
