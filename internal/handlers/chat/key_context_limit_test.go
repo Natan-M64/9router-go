@@ -104,8 +104,17 @@ func TestContextLimitRefusesARequestThatCannotFit(t *testing.T) {
 	// One user message far wider than the whole ceiling: there is no history
 	// to drop, so no trim can bring it under.
 	body := longRequest(1, 400000, nil)
-	if _, err := applyKeyContextLimit(body, 20000, 200000, 4096); err == nil {
+	_, err := applyKeyContextLimit(body, 20000, 200000, 4096)
+	if err == nil {
 		t.Fatal("an untrimmable request over the ceiling was accepted")
+	}
+	// Claude Code compacts the conversation when the API says "prompt is too
+	// long"; the same refusal in other words would only be shown as an error.
+	if !strings.HasPrefix(err.Error(), "prompt is too long: ") {
+		t.Errorf("refusal %q does not open with the phrase clients match to compact", err.Error())
+	}
+	if !strings.Contains(err.Error(), "> 20000 maximum") {
+		t.Errorf("refusal %q does not name the key's ceiling", err.Error())
 	}
 }
 

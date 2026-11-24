@@ -41,7 +41,11 @@ func (e *ContextLimitError) Error() string {
 	if e.Reason != "" {
 		return e.Reason
 	}
-	return fmt.Sprintf("request context is %d tokens, above this API key's %d-token context limit", e.Used, e.Window)
+	// The wording opens with "prompt is too long: N tokens > M maximum", the
+	// phrase Anthropic's API uses and Claude Code matches to decide that the
+	// conversation must be compacted. A message that says the same thing in other
+	// words is an error to the client, not a signal to compact.
+	return fmt.Sprintf("prompt is too long: %d tokens > %d maximum (this API key's context limit)", e.Used, e.Window)
 }
 
 // keyContextLimit returns the context ceiling the caller's key carries, in
