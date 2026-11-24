@@ -134,3 +134,35 @@ func TestInjectReasoningContent_DeepSeekAliasNotForOtherProviders(t *testing.T) 
 		t.Errorf("non-deepseek provider must not rewrite the alias: %s", out)
 	}
 }
+
+// deepseek-v4.1-flash is in the catalog, but the DeepSeek API serves only
+// deepseek-flash and deepseek-v4-pro and answers 400 for it. The deepseek
+// provider sends the id the API knows, and leaves the client's reasoning
+// settings alone; other providers that do serve deepseek-v4.1-flash keep it.
+func TestInjectReasoningContent_DeepSeekV41FlashUsesTheWireName(t *testing.T) {
+	body := []byte(`{"model":"deepseek-v4.1-flash","reasoning_effort":"high","messages":[{"role":"user","content":"hi"}]}`)
+
+	var m map[string]any
+	if err := json.Unmarshal(InjectReasoningContent(body, "deepseek"), &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got, _ := m["model"].(string); got != "deepseek-flash" {
+		t.Errorf("deepseek model = %q, want deepseek-flash", got)
+	}
+	if got, _ := m["reasoning_effort"].(string); got != "high" {
+		t.Errorf("reasoning_effort = %q, want the client's high", got)
+	}
+	if _, ok := m["thinking"]; ok {
+		t.Error("the wire-name rewrite must not add a thinking block")
+	}
+
+	for _, provider := range []string{"opencode-go", "opencode-zen", "commandcode"} {
+		var other map[string]any
+		if err := json.Unmarshal(InjectReasoningContent(body, provider), &other); err != nil {
+			t.Fatalf("unmarshal %s: %v", provider, err)
+		}
+		if got, _ := other["model"].(string); got != "deepseek-v4.1-flash" {
+			t.Errorf("%s model = %q, want it unchanged", provider, got)
+		}
+	}
+}

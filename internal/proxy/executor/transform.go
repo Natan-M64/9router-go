@@ -935,6 +935,24 @@ func applyDeepSeekV4ProAlias(reqMap map[string]any, modelLower string) bool {
 	return true
 }
 
+// deepSeekWireNames maps catalog ids the DeepSeek API does not serve to the id
+// it does. The API answers 400 ("The supported API model names are
+// deepseek-flash, deepseek-v4-pro") for deepseek-v4.1-flash, an id that is valid
+// on the opencode gateways. Unlike the -max/-none aliases this changes only the
+// model: the client's thinking and reasoning_effort stay as sent.
+var deepSeekWireNames = map[string]string{
+	"deepseek-v4.1-flash": "deepseek-flash",
+}
+
+func applyDeepSeekWireName(reqMap map[string]any, modelLower string) bool {
+	wire, ok := deepSeekWireNames[modelLower]
+	if !ok {
+		return false
+	}
+	reqMap["model"] = wire
+	return true
+}
+
 // Closed value set gets a named type (repo AGENTS.md §4.C).
 type reasoningInjectScope int
 
@@ -983,6 +1001,9 @@ func InjectReasoningContent(body []byte, provider string) []byte {
 		// resolve them to the base model with their thinking toggle/effort
 		// attached so the injection below runs against the id the API serves.
 		changed = applyDeepSeekV4ProAlias(reqMap, modelLower)
+		if applyDeepSeekWireName(reqMap, modelLower) {
+			changed = true
+		}
 	}
 	changed = normalizeTopLevelReasoning(reqMap) || changed
 
