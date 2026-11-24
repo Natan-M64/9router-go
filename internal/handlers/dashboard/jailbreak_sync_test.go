@@ -38,6 +38,9 @@ type fakeSyncStore struct {
 	saved []*db.JailbreakDoc
 	// savedSources records the source write-back.
 	savedSources []JailbreakSyncSource
+	// inUse and usedErr drive InUse: whether a combo uses the source.
+	inUse   bool
+	usedErr error
 }
 
 func (f *fakeSyncStore) ListSources(context.Context) ([]JailbreakSyncSource, error) {
@@ -75,6 +78,11 @@ func (f *fakeSyncStore) FetchText(_ context.Context, _ JailbreakSyncSource, _, p
 		}
 	}
 	return f.texts[path], nil
+}
+
+// inUse is what InUse reports for the fake store; usedErr makes it fail.
+func (f *fakeSyncStore) InUse(context.Context, JailbreakSyncSource) (bool, error) {
+	return f.inUse, f.usedErr
 }
 
 func source() JailbreakSyncSource {
@@ -669,5 +677,144 @@ func TestDefaultJailbreakSyncSourceIsSeededOff(t *testing.T) {
 		if src.Enabled {
 			t.Errorf("source %q is seeded enabled; a fresh install must not fetch it on its own", src.ID)
 		}
+	}
+}
+
+// The automatic pass refreshes a source only while a combo uses it. A source
+// nobody uses is not fetched on a schedule, which is what keeps a fresh install
+// and an operator who stopped using the presets from calling the outside.
+func TestJailbreakSyncAutomaticPassNeedsAComboUsingTheSource(t *testing.T) {
+	cases := []struct {
+		name    string
+		enabled bool
+		inUse   bool
+		usedErr error
+		want    int
+	}{
+		{"enabled and used", true, true, nil, 1},
+		{"enabled but unused", true, false, nil, 0},
+		{"used but paused", false, true, nil, 0},
+		{"enabled, and the check failed", true, true, errors.New("db down"), 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := source()
+			src.Enabled = tc.enabled
+			f := &fakeSyncStore{sources: []JailbreakSyncSource{src}, inUse: tc.inUse, usedErr: tc.usedErr}
+			outcomes, err := newSync(f).RunInUse(context.Background())
+			if err != nil {
+				t.Fatalf("RunInUse() error = %v", err)
+			}
+			if len(outcomes) != tc.want {
+				t.Errorf("RunInUse() ran %d sources, want %d", len(outcomes), tc.want)
+			}
+		})
+	}
+}
+
+// "Sync now" is the operator asking for the download: it runs every source,
+// paused or unused, so the library can be fetched the first time.
+func TestJailbreakSyncManualPassRunsPausedAndUnusedSources(t *testing.T) {
+	src := source()
+	src.Enabled = false
+	f := &fakeSyncStore{sources: []JailbreakSyncSource{src}, inUse: false}
+	outcomes, err := newSync(f).RunManual(context.Background())
+	if err != nil || len(outcomes) != 1 {
+		t.Fatalf("RunManual() = %d outcomes, %v; want the paused source to run", len(outcomes), err)
+	}
+	// The plain pass is unchanged: it still skips a paused source.
+	if outcomes, _ := newSync(f).Run(context.Background()); len(outcomes) != 0 {
+		t.Errorf("Run() ran a paused source")
+	}
+}
+
+// What "in use" means on the real store: an enabled binding on a combo's name
+// that points at a preset this source wrote.
+func TestJailbreakSyncInUseReadsComboBindings(t *testing.T) {
+	conn, repo := newSyncTestRepo(t)
+	defer conn.Close()
+	store := &jailbreakSyncRepoStore{repo: repo}
+	src := JailbreakSyncSource{ID: "s1", Target: "owner/lib", Enabled: true}
+	ctx := context.Background()
+
+	inUse := func() bool {
+		t.Helper()
+		used, err := store.InUse(ctx, src)
+		if err != nil {
+			t.Fatalf("InUse: %v", err)
+		}
+		return used
+	}
+	mustSave := func(d *db.JailbreakDoc) {
+		t.Helper()
+		if err := repo.SaveJailbreakPreset(d); err != nil {
+			t.Fatalf("save preset: %v", err)
+		}
+	}
+	mustSave(&db.JailbreakDoc{ID: "synced", Name: "Synced", Prompt: "P", SyncOrigin: "owner/lib@main", SyncPath: "a.md"})
+	mustSave(&db.JailbreakDoc{ID: "other-lib", Name: "Other", Prompt: "P", SyncOrigin: "owner/lib-two@main", SyncPath: "a.md"})
+	mustSave(&db.JailbreakDoc{ID: "by-hand", Name: "Hand", Prompt: "P"})
+	if err := repo.CreateCombo("combo-a", "combo-a", "", `["ag/x"]`, "fallback", ""); err != nil {
+		t.Fatalf("create combo: %v", err)
+	}
+
+	if inUse() {
+		t.Fatal("in use with no binding at all")
+	}
+	// A binding on a model that is not a combo does not count.
+	if err := repo.SetJailbreakModelPreset("ag/x", "synced", true); err != nil {
+		t.Fatal(err)
+	}
+	if inUse() {
+		t.Error("a binding on a single model counted as a combo using the source")
+	}
+	// A combo bound to another source's preset, or to a hand-made one, does not count.
+	for _, preset := range []string{"other-lib", "by-hand", ""} {
+		if err := repo.SetJailbreakModelPreset("combo-a", preset, true); err != nil {
+			t.Fatal(err)
+		}
+		if inUse() {
+			t.Errorf("a combo bound to preset %q counted as using this source", preset)
+		}
+	}
+	// A disabled binding does not count.
+	if err := repo.SetJailbreakModelPreset("combo-a", "synced", false); err != nil {
+		t.Fatal(err)
+	}
+	if inUse() {
+		t.Error("a disabled binding counted")
+	}
+	// The combo bound to a preset this source wrote does.
+	if err := repo.SetJailbreakModelPreset("combo-a", "synced", true); err != nil {
+		t.Fatal(err)
+	}
+	if !inUse() {
+		t.Error("a combo bound to a preset this source wrote was not seen as using it")
+	}
+}
+
+// The "Sync now" button fetches a paused source: it is how the library is
+// downloaded the first time, before any combo could use a preset from it.
+func TestJailbreakSyncRunEndpointFetchesAPausedSource(t *testing.T) {
+	conn, repo := newSyncTestRepo(t)
+	defer conn.Close()
+	h := NewDashboardHandler(repo)
+	src := source()
+	src.Enabled = false
+	h.jailbreakSync = newSync(&fakeSyncStore{sources: []JailbreakSyncSource{src}})
+
+	rr := httptest.NewRecorder()
+	h.HandleRunJailbreakSync(rr, httptest.NewRequest(http.MethodPost, "/api/jailbreak/sync/run", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rr.Code, rr.Body.String())
+	}
+	var out struct {
+		Outcomes []JailbreakSyncOutcome `json:"outcomes"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(out.Outcomes) != 1 {
+		t.Errorf("the endpoint ran %d sources, want the paused one", len(out.Outcomes))
 	}
 }

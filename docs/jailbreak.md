@@ -7,7 +7,9 @@ and off by default: a model is never injected because it exists, only because
 you armed it.
 
 **Nothing is armed by default.** Keyword rules (below) are behind a global switch that is off on a
-fresh install, and the preset library sync is seeded disabled. To use a preset, either pick it in the
+fresh install, and the preset library sync is seeded disabled. **Sync now** downloads every source once,
+even a paused one; the automatic refresh (on boot and hourly) runs only for an enabled source whose
+presets at least one combo is bound to, so nothing is fetched on a schedule for a library nobody uses. To use a preset, either pick it in the
 combo's edit dialog (**Prompt injection**: Off, Default document, or a preset), which binds the combo's
 name and arms every leg of that combo, or bind a model on the Jailbreak page. Turn **Match presets by
 model keyword** on only if you want keyword rules to arm requests by themselves. Every injected request

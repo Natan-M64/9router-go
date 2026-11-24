@@ -1624,14 +1624,17 @@ import JailbreakTester from './jailbreak/JailbreakTester.svelte'
 
   <!-- Auto-sync. The import card above answers "give me these prompts now";
        this one follows a collection the way a subscription follows a feed,
-       re-reading it on boot and every hour after. Sources are the worker's own
-       state, so a paused source stays listed and is simply never fetched. -->
+       re-reading it on boot and every hour after, but only for an enabled
+       source that a combo uses. Sources are the worker's own state, so a paused
+       source stays listed and is fetched only by "Sync now". -->
   <Card padding="md">
     <div class="flex items-center justify-between gap-3">
       <div>
         <h2 class="text-sm font-bold text-text-main">Auto-sync</h2>
         <p class="text-xs text-text-subtle pt-1">
-          Repositories the preset library follows, re-read on boot and every hour.
+          Repositories the preset library can follow. <span class="text-text-main">Sync now</span> downloads
+          every source once, even a paused one. The automatic refresh (on boot and every hour) runs only for an
+          enabled source whose presets a combo uses.
         </p>
       </div>
       <Button variant="outline" size="sm" icon="sync" disabled={syncSaving} onclick={runSyncNow}>

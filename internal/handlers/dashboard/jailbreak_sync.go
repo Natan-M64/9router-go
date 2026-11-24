@@ -136,6 +136,11 @@ type jailbreakSyncStore interface {
 	FetchFiles(ctx context.Context, src JailbreakSyncSource) ([]githubFile, []jailbreakImportRefusal, string, error)
 	// FetchText reads one file's body at the ref the pass resolved.
 	FetchText(ctx context.Context, src JailbreakSyncSource, ref, path string) (string, error)
+	// InUse reports whether at least one combo is bound to a preset this source
+	// wrote. The automatic pass refreshes a source only while that is true:
+	// refreshing rewrites prompt text that goes into requests, so it is done for
+	// a collection somebody chose to use, not for one that merely sits there.
+	InUse(ctx context.Context, src JailbreakSyncSource) (bool, error)
 }
 
 // jailbreakSync is the worker: one pass over every enabled source, guarded so
@@ -170,6 +175,35 @@ func NewJailbreakSync(repo *db.Repo) *jailbreakSync {
 var ErrJailbreakSyncBusy = fmt.Errorf("a preset sync is already running")
 
 func (s *jailbreakSync) Run(ctx context.Context) ([]JailbreakSyncOutcome, error) {
+	return s.run(ctx, func(_ context.Context, src JailbreakSyncSource) bool { return src.Enabled })
+}
+
+// RunManual is the pass behind "Sync now": every source, enabled or not. An
+// operator pressing the button asked for this download, and it is how the
+// library is fetched the first time, before any combo can use a preset from it.
+func (s *jailbreakSync) RunManual(ctx context.Context) ([]JailbreakSyncOutcome, error) {
+	return s.run(ctx, func(context.Context, JailbreakSyncSource) bool { return true })
+}
+
+// RunInUse is the pass the background loop runs: an enabled source that at
+// least one combo uses. Nothing is fetched on a schedule for a collection no
+// combo is bound to, so a fresh install, or an operator who stopped using the
+// presets, makes no outside requests.
+func (s *jailbreakSync) RunInUse(ctx context.Context) ([]JailbreakSyncOutcome, error) {
+	return s.run(ctx, func(ctx context.Context, src JailbreakSyncSource) bool {
+		if !src.Enabled {
+			return false
+		}
+		used, err := s.store.InUse(ctx, src)
+		if err != nil {
+			log.Warn("jailbreak_sync", "could not tell whether a source is in use; skipping it", "source", src.ID, "error", err)
+			return false
+		}
+		return used
+	})
+}
+
+func (s *jailbreakSync) run(ctx context.Context, include func(context.Context, JailbreakSyncSource) bool) ([]JailbreakSyncOutcome, error) {
 	s.mu.Lock()
 	if s.running {
 		s.mu.Unlock()
@@ -196,7 +230,7 @@ func (s *jailbreakSync) Run(ctx context.Context) ([]JailbreakSyncOutcome, error)
 	// the only place the result lands.
 	updated := make(map[string]JailbreakSyncSource, len(sources))
 	for _, src := range sources {
-		if !src.Enabled {
+		if !include(ctx, src) {
 			continue
 		}
 		outcome := s.runOne(ctx, src)
@@ -460,7 +494,7 @@ func (s *jailbreakSync) Start(ctx context.Context) {
 		case <-time.After(45 * time.Second):
 		}
 
-		if _, err := s.Run(ctx); err != nil && !errors.Is(err, ErrJailbreakSyncBusy) {
+		if _, err := s.RunInUse(ctx); err != nil && !errors.Is(err, ErrJailbreakSyncBusy) {
 			log.Warn("jailbreak_sync", "initial preset sync failed", "error", err)
 		}
 
@@ -479,7 +513,7 @@ func (s *jailbreakSync) Start(ctx context.Context) {
 					// re-read the same bytes.
 					continue
 				}
-				if _, err := s.Run(ctx); err != nil && !errors.Is(err, ErrJailbreakSyncBusy) {
+				if _, err := s.RunInUse(ctx); err != nil && !errors.Is(err, ErrJailbreakSyncBusy) {
 					log.Warn("jailbreak_sync", "periodic preset sync failed", "error", err)
 				}
 			}
@@ -492,6 +526,45 @@ func (s *jailbreakSync) Start(ctx context.Context) {
 // GitHub importer the dashboard already trusts.
 type jailbreakSyncRepoStore struct {
 	repo *db.Repo
+}
+
+// InUse reports whether an enabled global binding on a combo's name points at a
+// preset this source wrote (its origin is "<target>@<ref>"). Bindings on single
+// models do not count: the sync follows the combos a user set up.
+func (s *jailbreakSyncRepoStore) InUse(ctx context.Context, src JailbreakSyncSource) (bool, error) {
+	bindings, err := s.repo.ListJailbreakModelConfigs()
+	if err != nil {
+		return false, err
+	}
+	if len(bindings) == 0 {
+		return false, nil
+	}
+	combos, err := s.repo.GetCombos()
+	if err != nil {
+		return false, err
+	}
+	comboNames := make(map[string]bool, len(combos))
+	for _, c := range combos {
+		comboNames[c.Name] = true
+	}
+	presets, err := s.repo.ListJailbreakPresetsContext(ctx)
+	if err != nil {
+		return false, err
+	}
+	origin := make(map[string]string, len(presets))
+	for _, p := range presets {
+		origin[p.ID] = p.SyncOrigin
+	}
+	prefix := strings.TrimSpace(src.Target) + "@"
+	for id, cfg := range bindings {
+		if !cfg.Enabled || !comboNames[id] {
+			continue
+		}
+		if strings.HasPrefix(origin[cfg.PresetID], prefix) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *jailbreakSyncRepoStore) ListSources(ctx context.Context) ([]JailbreakSyncSource, error) {
@@ -636,7 +709,7 @@ func (h *DashboardHandler) HandleRunJailbreakSync(w http.ResponseWriter, r *http
 		handlerutil.WriteJSONError(w, http.StatusServiceUnavailable, "preset sync is not configured")
 		return
 	}
-	outcomes, err := s.Run(r.Context())
+	outcomes, err := s.RunManual(r.Context())
 	if err != nil {
 		handlerutil.WriteJSONError(w, http.StatusConflict, err.Error())
 		return
