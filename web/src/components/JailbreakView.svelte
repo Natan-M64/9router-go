@@ -289,9 +289,13 @@ import JailbreakTester from './jailbreak/JailbreakTester.svelte'
   async function load() {
     loading = true
     try {
-      try {
-        keywordsEnabled = !!(await api.getJailbreakKeywords())?.enabled
-      } catch {}
+      // Not awaited: the switch is a small extra read, and holding the page's own
+      // data behind it would put the key list (and every picker built from it)
+      // on screen later than the view that shows them.
+      void api
+        .getJailbreakKeywords()
+        .then((res) => (keywordsEnabled = !!res?.enabled))
+        .catch(() => {})
       const [presetList, modelMap, excludeList, keyList] = await Promise.all([
         api.listJailbreakPresets(),
         api.listJailbreakModels(),
