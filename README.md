@@ -10,11 +10,9 @@
 
 **Connect Claude Code, Cursor, Antigravity, Codex, Gemini, OpenCode, Cline, OpenClaw... to 150+ AI providers & 1000+ models — no Node.js needed at runtime.**
 
-[![CI](https://github.com/luqman-v1/9router-go/actions/workflows/ci.yml/badge.svg)](https://github.com/luqman-v1/9router-go/actions/workflows/ci.yml)
-[![Release](https://github.com/luqman-v1/9router-go/actions/workflows/release.yml/badge.svg)](https://github.com/luqman-v1/9router-go/actions/workflows/release.yml)
-[![GitHub release](https://img.shields.io/github/v/release/luqman-v1/9router-go)](https://github.com/luqman-v1/9router-go/releases/latest)
-[![License](https://img.shields.io/github/license/luqman-v1/9router-go)](https://github.com/luqman-v1/9router-go/blob/main/LICENSE)
-[![GitHub All Releases](https://img.shields.io/github/downloads/luqman-v1/9router-go/total.svg)](https://github.com/luqman-v1/9router-go/releases)
+[![CI](https://github.com/Natan-M64/9router-go/actions/workflows/ci.yml/badge.svg)](https://github.com/Natan-M64/9router-go/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/Natan-M64/9router-go)](https://github.com/Natan-M64/9router-go/blob/main/LICENSE)
+[![Upstream release](https://img.shields.io/github/v/release/luqman-v1/9router-go?label=upstream%20release)](https://github.com/luqman-v1/9router-go/releases/latest)
 [![Telegram](https://img.shields.io/badge/Telegram-Join%20Group-26A5E1?logo=telegram&logoColor=white)](https://luqman-v1.github.io/9router-go/tg)
 
 [🚀 Quick Start](#-quick-start) • [💡 Features](#-key-features) • [⚙️ Setup](#-setup-guide) • [🔄 Share DB with 9Router](#-sharing-a-database-with-9router) • [🌐 Upstream](https://github.com/decolua/9router)
@@ -22,6 +20,16 @@
 </div>
 
 ---
+
+> **About this fork.** `Natan-M64/9router-go` follows [`luqman-v1/9router-go`](https://github.com/luqman-v1/9router-go), a Go port of [`decolua/9router`](https://github.com/decolua/9router), and was in sync with it when this was written. On top of upstream it adds:
+>
+> - **RTK:** content-based filter selection needs two signs of a command's output (ordinary text is no longer rewritten as CLI output), results are cached, and accessibility snapshots are compacted. See [`docs/RTK_FILTERS.md`](docs/RTK_FILTERS.md).
+> - **Prompt cache:** the Caveman clarity note stays on the tail of the request, the Claude cache anchor also covers API-key requests to Anthropic, and OpenRouter keeps `cache_control` markers (at most four).
+> - **On-demand mode:** `--idle-timeout`, socket activation and `maintain`; the background daemon is recognised by process start time on macOS 27.
+> - **Combos and catalog:** JSON and OmniRoute import/export, the Codex 6.2 catalog, a per-model thinking selector and the DeepSeek `deepseek-flash` wire name.
+> - **Engineering:** `make ci-local`, multi-arch GHCR images published on release tags, and CI that skips Markdown-only pushes.
+>
+> **Releases.** This fork has not published a release yet, so the install commands below fetch **upstream** binaries, which do not include these changes. To run the fork, [build it from source](#build-from-source). Status and plans: [`docs/STATUS.md`](docs/STATUS.md).
 
 ## 🤔 Why 9router-go?
 
@@ -79,7 +87,7 @@ Result: Never stop coding, minimal cost + 20-40% token savings via RTK
 
 ## ⚡ Quick Start
 
-**1. Install (one line):**
+**1. Install (one line, upstream release):**
 
 ```bash
 # macOS / Linux
@@ -181,7 +189,7 @@ docker run -d --name 9router-go --restart unless-stopped \
 
 📦 [All release binaries](https://github.com/luqman-v1/9router-go/releases/latest) • 🔨 [Build from source](#-setup-guide)
 
-The `Natan-M64/9router-go` fork also builds multi-arch (`linux/amd64`, `linux/arm64`) non-root images to `ghcr.io/natan-m64/9router-go`. They are published only for release tags, not for every commit, and `:latest` moves only for stable tags: a tag with a hyphen (a prerelease such as `v1.2.3-exp.1`) never takes it. A pushed commit that changes only Markdown, `docs/`, `wiki/`, `screenshots/` or `site/` does not start the CI pipeline.
+The `Natan-M64/9router-go` fork also builds multi-arch (`linux/amd64`, `linux/arm64`) non-root images to `ghcr.io/natan-m64/9router-go`. They are published only for release tags, not for every commit, and none has been tagged yet, so the image does not exist until the first release. `:latest` moves only for stable tags: a tag with a hyphen (a prerelease such as `v1.2.3-exp.1`) never takes it. A pushed commit that changes only Markdown, `docs/`, `wiki/`, `screenshots/` or `site/` does not start the CI pipeline.
 
 ---
 
@@ -272,7 +280,7 @@ Full schema, operator contract, and multi-process limits: [`DATABASE.md`](DATABA
 
 ### Release binary
 
-Download from [GitHub Releases](https://github.com/luqman-v1/9router-go/releases/latest), verify against `SHA256SUMS.txt`.
+Download from the [upstream GitHub Releases](https://github.com/luqman-v1/9router-go/releases/latest), verify against `SHA256SUMS.txt`. These are upstream builds: they do not include this fork's changes (see the note at the top).
 
 ### 🧪 Experimental builds
 
@@ -303,7 +311,7 @@ install one over a stable release.
 Prerequisites: Go 1.27 and Bun 1.x (dashboard is embedded into the binary, so build web first):
 
 ```bash
-git clone https://github.com/luqman-v1/9router-go.git
+git clone https://github.com/Natan-M64/9router-go.git
 cd 9router-go
 make web-build   # bun install --frozen-lockfile && bun run build
 make build       # embeds VERSION into the Go binary
@@ -385,6 +393,7 @@ For Claude Messages clients: `ANTHROPIC_BASE_URL=http://localhost:20130/v1`.
 | `DATABASE_URL` | unset | Database engine: a `postgres://` DSN selects PostgreSQL; anything else (or unset) is SQLite and `DB_PATH` applies. Takes precedence over `DB_PATH` |
 | `INITIAL_PASSWORD` | unset (fallback `123456` locally) | First dashboard password |
 | `RTK_ENABLED` | `true` | RTK input compression |
+| `IDLE_TIMEOUT` | `0` (off) | Shut the gateway down after this idle duration, for example `15m` (see On-demand mode) |
 | `CAVEMAN_ENABLED` / `PONYTAIL_ENABLED` | `false` | Style savers |
 | `AUTO_UPDATE` | `false` | Background self-update |
 | `HTTP_PROXY` / `HTTPS_PROXY` | Go defaults | Upstream egress proxy |
@@ -491,11 +500,11 @@ PRs follow the checks CI runs: `go vet ./...`, `go test -count=1 ./...`, `make t
 
 Run `make ci-local` before pushing: it runs the gates that need no CI runner, in CI order and stopping at the first failure (oxlint, the svelte-check ratchet, frontend unit tests, `go vet`, `go test -count=1 ./...`). It does not replace the race, integration, cross-compile and Docker jobs.
 
-Everyone whose commit landed in the repository is credited on the wiki's [**Owner & Contributors**](https://luqman-v1.github.io/9router-go/team.html) page — photo, username, and contribution count, generated from the GitHub API.
+Everyone whose commit landed in the repository is credited on the wiki's [**Owner & Contributors**](https://natan-m64.github.io/9router-go/team.html) page — photo, username, and contribution count, generated from the GitHub API.
 
 ## 📚 Docs
 
-**Full documentation, searchable:** [**9router-go Wiki**](https://luqman-v1.github.io/9router-go/) — installation, usage, API reference, dashboard, providers, architecture, database, CLI, and a screenshot gallery. Every page supports `?q=` search and `#section` deep links.
+**Full documentation, searchable:** [**9router-go Wiki**](https://natan-m64.github.io/9router-go/) — installation, usage, API reference, dashboard, providers, architecture, database, CLI, and a screenshot gallery. Every page supports `?q=` search and `#section` deep links.
 
 Repository references:
 
@@ -514,4 +523,4 @@ Repository references:
 
 ## 📄 License
 
-MIT License — lihat [`LICENSE`](https://github.com/luqman-v1/9router-go/blob/main/LICENSE).
+MIT License — see [`LICENSE`](https://github.com/Natan-M64/9router-go/blob/main/LICENSE).
