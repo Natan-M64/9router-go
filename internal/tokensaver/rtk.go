@@ -425,6 +425,14 @@ func CompressTextDetailedWithCommand(text string, command string, cfg RTKConfig)
 		}
 	}
 
+	// 1b. Accessibility-tree snapshots (Playwright and other browser MCP
+	// tools): drop nodes that say nothing and halve the indentation before the
+	// generic truncation below cuts the middle out of a page by line count.
+	if compacted, did := compactARIASnapshot(curr); did {
+		curr = compacted
+		techniques = append(techniques, "aria-snapshot")
+	}
+
 	trimmed := strings.TrimSpace(curr)
 	cat := DetectCategory(trimmed)
 
