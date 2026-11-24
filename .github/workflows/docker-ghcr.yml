@@ -189,10 +189,18 @@ jobs:
 
       - name: Create and push manifest list
         working-directory: /tmp/digests
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          IMAGE: ${{ steps.prep.outputs.image }}
         run: |
-          docker buildx imagetools create \
-            $(printf ' -t %s' ${{ steps.meta.outputs.tags }}) \
-            $(printf ' ${{ steps.prep.outputs.image }}@sha256:%s' *)
+          args=()
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && args+=("-t" "$tag")
+          done <<< "$TAGS"
+          for digest in *; do
+            [ -e "$digest" ] && args+=("${IMAGE}@sha256:${digest}")
+          done
+          docker buildx imagetools create "${args[@]}"
 
       - name: Inspect manifest & write summary
         run: |
