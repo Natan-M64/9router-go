@@ -267,10 +267,31 @@ import JailbreakTester from './jailbreak/JailbreakTester.svelte'
   // the operator typing (or knowing) the exact prefix string.
   let bindingPrefix = $state('')
 
+  // Master switch for keyword rules. Off on a fresh install.
+  let keywordsEnabled = $state(false)
+  let keywordsBusy = $state(false)
+  let keywordsStatus = $state('')
+  async function toggleKeywords(next: boolean) {
+    keywordsBusy = true
+    keywordsStatus = ''
+    try {
+      const res = await api.setJailbreakKeywords(next)
+      keywordsEnabled = res?.enabled ?? next
+      keywordsStatus = keywordsEnabled ? 'Keyword matching is on.' : 'Keyword matching is off.'
+    } catch (e) {
+      keywordsStatus = 'Could not change keyword matching: ' + errorMessage(e)
+    } finally {
+      keywordsBusy = false
+    }
+  }
+
   onMount(load)
   async function load() {
     loading = true
     try {
+      try {
+        keywordsEnabled = !!(await api.getJailbreakKeywords())?.enabled
+      } catch {}
       const [presetList, modelMap, excludeList, keyList] = await Promise.all([
         api.listJailbreakPresets(),
         api.listJailbreakModels(),
@@ -1111,7 +1132,7 @@ import JailbreakTester from './jailbreak/JailbreakTester.svelte'
             <li>Global exclude list — a match means no injection, whatever anything else says.</li>
             <li>Exact binding on the id the client sent.</li>
             <li>Exclude of the winning preset.</li>
-            <li>Keyword on the primary id, before a keyword on a forwarded leg.</li>
+            <li>Keyword on the primary id, before a keyword on a forwarded leg (only when keyword matching is on).</li>
             <li>Among keyword hits on the same id, the longest wins; a tie goes to the lowest preset id.</li>
           </ol>
         </div>
@@ -1135,6 +1156,33 @@ import JailbreakTester from './jailbreak/JailbreakTester.svelte'
       </div>
     </details>
   </Card>
+  <!-- Keyword matching master switch. Off by default so that nothing is injected
+       until a model, or a combo, is bound to a preset on purpose. -->
+  <Card padding="sm" class="bg-surface-2/60">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div class="space-y-1">
+        <h2 class="text-sm font-bold text-text-main">Match presets by model keyword</h2>
+        <p class="text-[11px] text-text-subtle">
+          Off by default. To use a preset, pick it in the combo's edit dialog (or bind a model below).
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        {#if keywordsStatus}<span class="text-xs text-text-muted">{keywordsStatus}</span>{/if}
+        <Toggle
+          checked={keywordsEnabled}
+          disabled={keywordsBusy}
+          label="Match presets by model keyword"
+          onchange={toggleKeywords}
+        />
+      </div>
+    </div>
+    <p class="text-xs text-text-subtle pt-2">
+      When on, a preset's keyword rules arm every request whose model id matches, with nobody choosing:
+      that is how synced presets inject into models you never selected. Every injected request carries the
+      preset's whole prompt, which costs tokens. Exact bindings and combo choices work either way.
+    </p>
+  </Card>
+
   <!-- Global exclude list. The save action sits in the header beside the
        title, the same place New preset sits in the Presets card, so the two
        cards read with one convention. The rules below own the full width. -->

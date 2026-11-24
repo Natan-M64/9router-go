@@ -36,6 +36,8 @@
     sortComboMembers
   } from './types'
   import type { ComboSortKey, ModelMetaMap } from './types'
+  import { jailbreakChoiceFor } from './jailbreakBinding'
+  import type { JailbreakChoiceChange } from './jailbreakBinding'
 
   interface Props {
     isOpen: boolean
@@ -57,7 +59,9 @@
       matchRules: SmartRule[],
       timeoutMs: number,
       graceMs: number | undefined,
-      customPrompt: string
+      customPrompt: string,
+      /** undefined when the prompt-injection options could not be loaded: leave it as it is. */
+      jailbreak: JailbreakChoiceChange | undefined
     ) => Promise<void> | void
     onOpenModelPicker: () => void
     onUpdateModels: (models: string[]) => void
@@ -85,6 +89,37 @@
   let graceInput = $state<string | number | null>(graceMsToSeconds(responseGraceMs))
   let graceMs = $derived(graceSecondsToMs(graceInput))
   let customPrompt = $state(editingCombo?.customPrompt || '')
+
+  // Prompt injection (jailbreak) for this combo. '' is off, which is the default
+  // everywhere: nothing is injected unless a user picks a preset here. The
+  // choice is stored as a binding on the combo's name, which arms every leg.
+  let jailbreakPresets = $state<{ id: string; name: string }[]>([])
+  let jailbreakChoice = $state('')
+  let jailbreakInitial = $state('')
+  let jailbreakReady = $state(false)
+  let jailbreakLoadError = $state('')
+  let jailbreakRequested = false
+  $effect(() => {
+    if (!isOpen || jailbreakRequested) return
+    jailbreakRequested = true
+    void loadJailbreak()
+  })
+  async function loadJailbreak() {
+    try {
+      const [presets, bindings] = await Promise.all([api.listJailbreakPresets(), api.listJailbreakModels()])
+      // A preset with no id or no prompt cannot be chosen: the first has nothing
+      // to bind and the second would inject nothing.
+      jailbreakPresets = (Array.isArray(presets) ? presets : [])
+        .flatMap((p) => (p.id && p.prompt ? [{ id: p.id, name: p.name || p.id }] : []))
+        .sort((a, b) => a.name.localeCompare(b.name))
+      const current = editingCombo ? jailbreakChoiceFor(bindings || {}, editingCombo.name) : ''
+      jailbreakChoice = current
+      jailbreakInitial = current
+      jailbreakReady = true
+    } catch (e) {
+      jailbreakLoadError = e instanceof Error ? e.message : String(e)
+    }
+  }
   let graceError = $derived(
     graceMs === null
       ? `Enter 0–${MAX_FIRST_TOKEN_TIMEOUT_SECONDS} seconds, or leave empty for the default`
@@ -347,7 +382,15 @@
   function handleSave() {
     if (!validateModalName(modalName)) return
     if (timeoutMs === null || graceMs === null) return
-    onSave(modalName.trim(), models, rules, timeoutMs, graceMs, customPrompt.trim())
+    onSave(
+      modalName.trim(),
+      models,
+      rules,
+      timeoutMs,
+      graceMs,
+      customPrompt.trim(),
+      jailbreakReady ? { initial: jailbreakInitial, choice: jailbreakChoice } : undefined
+    )
   }
 
   function moveModel(idx: number, delta: number) {
@@ -414,6 +457,35 @@
         Optional system prompt used only by this combo. When set, it replaces the
         global custom prompt prefix/suffix for requests routed through this combo.
       </p>
+    </div>
+
+    <!-- Prompt injection (jailbreak): off unless chosen here. -->
+    <div class="rounded-lg border border-border bg-surface-2 p-3">
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined text-[18px] text-brand-500">auto_fix_high</span>
+        <label for="combo-jailbreak" class="text-sm font-medium">Prompt injection (Jailbreak)</label>
+        <select
+          id="combo-jailbreak"
+          bind:value={jailbreakChoice}
+          disabled={!jailbreakReady}
+          class="ml-auto max-w-[55%] rounded border border-border bg-surface px-2 py-1 text-xs text-text-main focus:outline-none focus:border-brand-500 cursor-pointer disabled:opacity-60"
+        >
+          <option value="">Off (default)</option>
+          <option value="default">Default document</option>
+          {#each jailbreakPresets as preset (preset.id)}
+            <option value={preset.id}>{preset.name}</option>
+          {/each}
+        </select>
+      </div>
+      <p class="text-[10px] text-text-muted mt-1.5">
+        Off by default. A preset chosen here is prepended to every request routed through this combo,
+        on all of its models, and its whole prompt is added to each request, which costs tokens.
+      </p>
+      {#if jailbreakLoadError}
+        <p class="text-[10px] text-danger mt-1">
+          Could not load the options ({jailbreakLoadError}); saving will leave this setting unchanged.
+        </p>
+      {/if}
     </div>
 
     <!-- Model response timeout: a failover control, so it sits right under the

@@ -657,3 +657,17 @@ func TestJailbreakGithubTokenHeader(t *testing.T) {
 		})
 	}
 }
+
+// The library source is offered but not followed: nothing is downloaded from an
+// outside repository until the operator turns it on.
+func TestDefaultJailbreakSyncSourceIsSeededOff(t *testing.T) {
+	sources := defaultJailbreakSyncSources()
+	if len(sources) == 0 {
+		t.Fatal("no default source is offered")
+	}
+	for _, src := range sources {
+		if src.Enabled {
+			t.Errorf("source %q is seeded enabled; a fresh install must not fetch it on its own", src.ID)
+		}
+	}
+}

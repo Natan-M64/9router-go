@@ -7,7 +7,20 @@ import "testing"
 // precedence order (exact binding, then keyword on the requested id, then a
 // leg id, longest keyword first), and the two deny lists.
 
+// newJailbreakTestRepo is a repository with keyword rules switched ON, because
+// almost everything in this file exercises them. They are off on a real
+// install; newJailbreakTestRepoDefault keeps that default.
 func newJailbreakTestRepo(t *testing.T) *Repo {
+	t.Helper()
+	repo := newJailbreakTestRepoDefault(t)
+	if err := repo.SetJailbreakKeywordsEnabled(true); err != nil {
+		t.Fatalf("enable keyword rules: %v", err)
+	}
+	return repo
+}
+
+// newJailbreakTestRepoDefault is a repository exactly as a fresh install has it.
+func newJailbreakTestRepoDefault(t *testing.T) *Repo {
 	t.Helper()
 	database, cleanup := setupTestDB(t)
 	t.Cleanup(cleanup)
@@ -515,5 +528,92 @@ func TestGetJailbreakDocForModelResolvesKeyword(t *testing.T) {
 	}
 	if doc != nil {
 		t.Errorf("unrelated id got %+v, want nil", doc)
+	}
+}
+
+// On a fresh install no preset arms a request by keyword: the include rules of
+// synced or hand-made presets do nothing until the switch is turned on.
+func TestKeywordRulesAreOffByDefault(t *testing.T) {
+	repo := newJailbreakTestRepoDefault(t)
+	if on, err := repo.GetJailbreakKeywordsEnabled(); err != nil || on {
+		t.Fatalf("GetJailbreakKeywordsEnabled() = %v, %v; want false on a fresh install", on, err)
+	}
+	if err := repo.SaveJailbreakPreset(&JailbreakDoc{ID: "kw", Name: "KW", Prompt: "KEYWORD RULE", Keywords: []JailbreakKeyword{{Text: "deepseek"}}}); err != nil {
+		t.Fatalf("save preset: %v", err)
+	}
+
+	doc, err := repo.ResolveJailbreakDoc("", "providerx/deepseek-4-pro", "deepseek-4-pro")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if doc != nil {
+		t.Errorf("a keyword armed a request with keyword rules off: %+v", doc)
+	}
+	match, err := repo.ExplainJailbreakDoc("", "providerx/deepseek-4-pro")
+	if err != nil {
+		t.Fatalf("explain: %v", err)
+	}
+	if match.Injected || match.Reason != "keywords-off" {
+		t.Errorf("explain = %+v, want not injected with reason keywords-off", match)
+	}
+}
+
+// An exact binding is the operator's own choice and works with keyword rules
+// off. Binding a combo name arms the combo's legs, and nothing else.
+func TestExactBindingArmsWithKeywordRulesOff(t *testing.T) {
+	repo := newJailbreakTestRepoDefault(t)
+	if err := repo.SaveJailbreakPreset(&JailbreakDoc{ID: "p", Name: "P", Prompt: "BOUND RULE", Keywords: []JailbreakKeyword{{Text: "deepseek"}}}); err != nil {
+		t.Fatalf("save preset: %v", err)
+	}
+	if err := repo.SetJailbreakModelPreset("main-fast", "p", true); err != nil {
+		t.Fatalf("bind combo: %v", err)
+	}
+
+	doc, err := repo.ResolveJailbreakDoc("", "main-fast", "ag/gemini-4-hydrogen-low", "gemini-4-hydrogen-low")
+	if err != nil || doc == nil || doc.Prompt != "BOUND RULE" {
+		t.Fatalf("bound combo resolved to %+v, %v; want the bound preset", doc, err)
+	}
+	// Another combo, even one that would match the keyword, stays untouched.
+	if doc, err := repo.ResolveJailbreakDoc("", "other-combo", "providerx/deepseek-4-pro", "deepseek-4-pro"); err != nil || doc != nil {
+		t.Errorf("an unbound combo resolved to %+v, %v; want nothing", doc, err)
+	}
+	// Removing the binding turns the combo off again.
+	if err := repo.DeleteJailbreakModel("main-fast"); err != nil {
+		t.Fatalf("unbind combo: %v", err)
+	}
+	if doc, err := repo.ResolveJailbreakDoc("", "main-fast", "ag/gemini-4-hydrogen-low"); err != nil || doc != nil {
+		t.Errorf("after unbinding, the combo resolved to %+v, %v; want nothing", doc, err)
+	}
+}
+
+func TestKeywordSwitchTurnsRulesOnAndOff(t *testing.T) {
+	repo := newJailbreakTestRepoDefault(t)
+	if err := repo.SaveJailbreakPreset(&JailbreakDoc{ID: "kw", Name: "KW", Prompt: "KEYWORD RULE", Keywords: []JailbreakKeyword{{Text: "deepseek"}}}); err != nil {
+		t.Fatalf("save preset: %v", err)
+	}
+	resolve := func() *JailbreakDoc {
+		doc, err := repo.ResolveJailbreakDoc("", "providerx/deepseek-4-pro")
+		if err != nil {
+			t.Fatalf("resolve: %v", err)
+		}
+		return doc
+	}
+	if resolve() != nil {
+		t.Fatal("injected before the switch was turned on")
+	}
+	if err := repo.SetJailbreakKeywordsEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	if on, _ := repo.GetJailbreakKeywordsEnabled(); !on {
+		t.Fatal("switch did not read back as on")
+	}
+	if resolve() == nil {
+		t.Fatal("not injected with the switch on")
+	}
+	if err := repo.SetJailbreakKeywordsEnabled(false); err != nil {
+		t.Fatal(err)
+	}
+	if resolve() != nil {
+		t.Fatal("still injected after the switch was turned off (stale cached ruleset)")
 	}
 }

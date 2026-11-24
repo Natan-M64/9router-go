@@ -90,6 +90,10 @@ const (
 	// jailbreakExcludeKey holds the global exclude list, which denies every
 	// preset and every exact binding.
 	jailbreakExcludeKey = "exclude"
+	// jailbreakKeywordsEnabledKey stores the master switch for keyword rules. It
+	// is absent on a fresh install, which means off: a model is injected only
+	// when someone bound it, or its combo, to a preset.
+	jailbreakKeywordsEnabledKey = "keywords_enabled"
 )
 
 // GetJailbreakDoc returns the default saved document, or zero values when none was

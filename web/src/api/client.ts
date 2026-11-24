@@ -2989,6 +2989,14 @@ export const api = {
       method: 'DELETE',
     }),
   listJailbreakModels: () => request<Record<string, JailbreakModelConfig>>('/api/jailbreak/models'),
+  // Master switch for keyword rules. Off by default: a model is injected only
+  // when it, or its combo, is bound to a preset.
+  getJailbreakKeywords: () => request<{ enabled: boolean }>('/api/jailbreak/keywords'),
+  setJailbreakKeywords: (enabled: boolean) =>
+    request<{ ok: boolean; enabled: boolean }>('/api/jailbreak/keywords', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    }),
   // Preset auto-sync: the GitHub collections the library follows. One pass
   // rewrites only the presets it wrote itself, so an operator's hand-made
   // preset is never touched and a file upstream dropped is reported as

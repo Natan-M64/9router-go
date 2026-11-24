@@ -28,6 +28,8 @@
   import CreateComboModal from './CreateComboModal.svelte'
   import ImportCombosModal from './ImportCombosModal.svelte'
   import { exportCombosToJson } from './comboImportExport'
+  import { planJailbreakChange } from './jailbreakBinding'
+  import type { JailbreakChoiceChange } from './jailbreakBinding'
   import ModelPickerModal from './ModelPickerModal.svelte'
   import CapacityAdapterSection from './CapacityAdapterSection.svelte'
   import ConfirmModal from '../../lib/ui/ConfirmModal.svelte'
@@ -74,6 +76,7 @@
   let modalModels = $state<string[]>([])
   let isSavingCombo = $state(false)
   let comboSaveError = $state('')
+  let jailbreakNote = $state('')
   let modalNameResetKey = $state(0)
 
   // Model Picker Modal state
@@ -419,7 +422,8 @@ async function handleSetContextWindow(combo: Combo, contextWindow: number) {
     matchRules: SmartRule[],
     timeoutMs: number,
     graceMs: number | undefined,
-    customPrompt: string
+    customPrompt: string,
+    jailbreak: JailbreakChoiceChange | undefined
   ) {
     isSavingCombo = true
     comboSaveError = ''
@@ -441,6 +445,20 @@ async function handleSetContextWindow(combo: Combo, contextWindow: number) {
         )
         await api.patchSettings({ comboStrategies: updated })
         comboStrategies = updated
+      }
+      // The prompt-injection choice is a binding on the combo's name. A failure
+      // here must not read as a failed save: the combo is already stored, and
+      // saving again would try to create it twice.
+      jailbreakNote = ''
+      if (jailbreak) {
+        try {
+          for (const op of planJailbreakChange(editingCombo?.name ?? null, name, jailbreak)) {
+            if (op.op === 'set') await api.setJailbreakModel(op.id, op.presetId, true)
+            else await api.deleteJailbreakModel(op.id)
+          }
+        } catch (e) {
+          jailbreakNote = `Saved, but the prompt injection setting was not applied: ${e instanceof Error ? e.message : String(e)}`
+        }
       }
       closeModal()
       onRefresh()
@@ -643,6 +661,9 @@ async function handleSetContextWindow(combo: Combo, contextWindow: number) {
     </Button>
     {#if reconcileNote}
       <span class="text-[11px] text-text-muted">{reconcileNote}</span>
+    {/if}
+    {#if jailbreakNote}
+      <span class="text-[11px] text-danger">{jailbreakNote}</span>
     {/if}
   </div>
 

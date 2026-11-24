@@ -188,6 +188,37 @@ func (h *DashboardHandler) HandlePutJailbreakExcludes(w http.ResponseWriter, r *
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "excludes": excludes})
 }
 
+// HandleGetJailbreakKeywords reports the master switch for keyword rules.
+func (h *DashboardHandler) HandleGetJailbreakKeywords(w http.ResponseWriter, r *http.Request) {
+	enabled, err := h.Repo.GetJailbreakKeywordsEnabled()
+	if err != nil {
+		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{"enabled": enabled})
+}
+
+// HandlePutJailbreakKeywords turns keyword rules on or off for every request.
+func (h *DashboardHandler) HandlePutJailbreakKeywords(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxJailbreakBodyBytes+1))
+	if err != nil {
+		handlerutil.WriteJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var req struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil || req.Enabled == nil {
+		handlerutil.WriteJSONError(w, http.StatusBadRequest, "enabled (true or false) is required")
+		return
+	}
+	if err := h.Repo.SetJailbreakKeywordsEnabled(*req.Enabled); err != nil {
+		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "enabled": *req.Enabled})
+}
+
 func (h *DashboardHandler) HandleListJailbreakModels(w http.ResponseWriter, r *http.Request) {
 	configs, err := h.Repo.ListJailbreakModelConfigs()
 	if err != nil {

@@ -385,6 +385,9 @@ func TestJailbreakGlobalExcludeRoutes(t *testing.T) {
 func TestJailbreakResolveRoute(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
+	if err := repo.SetJailbreakKeywordsEnabled(true); err != nil {
+		t.Fatalf("enable keyword rules: %v", err)
+	}
 	r := setupTestRouter(repo)
 
 	// Arm a preset by keyword.
@@ -670,5 +673,46 @@ func TestJailbreakUsageCounter(t *testing.T) {
 	}
 	if _, ok := usage["never-used"]; ok {
 		t.Errorf("never-used present, want absent")
+	}
+}
+
+func TestJailbreakKeywordsRouteDefaultsOffAndRoundTrips(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	r := setupTestRouter(repo)
+
+	read := func() bool {
+		req := httptest.NewRequest(http.MethodGet, "/api/jailbreak/keywords", nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET status = %d: %s", rec.Code, rec.Body.String())
+		}
+		var out struct {
+			Enabled bool `json:"enabled"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return out.Enabled
+	}
+	put := func(body string) int {
+		req := httptest.NewRequest(http.MethodPut, "/api/jailbreak/keywords", bytes.NewReader([]byte(body)))
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	if read() {
+		t.Fatal("keyword rules are on by default; they must be off")
+	}
+	if code := put(`{"enabled":true}`); code != http.StatusOK || !read() {
+		t.Fatalf("turning on: status %d, reads back %v", code, read())
+	}
+	if code := put(`{"enabled":false}`); code != http.StatusOK || read() {
+		t.Fatalf("turning off: status %d, reads back %v", code, read())
+	}
+	if code := put(`{}`); code != http.StatusBadRequest {
+		t.Errorf("a body without enabled returned %d, want 400 (never guess the switch)", code)
 	}
 }

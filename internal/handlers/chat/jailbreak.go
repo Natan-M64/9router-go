@@ -50,7 +50,7 @@ func (h *ChatHandler) applyJailbreak(ctx context.Context, body map[string]any, r
 		return ctx
 	}
 	injectJailbreakPrompt(body, doc)
-	log.Info("jailbreak", "applied", "model", requestedModel,
+	log.Info("jailbreak", "applied", "model", requestedModel, "preset", doc.ID,
 		"prompt_bytes", len(doc.Prompt), "safety_off", doc.GeminiSafety)
 	// Best-effort usage counter for the dashboard's per-preset hit count. A
 	// failed write must not fail a request that is already being injected.

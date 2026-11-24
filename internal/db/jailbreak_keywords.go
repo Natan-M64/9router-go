@@ -196,6 +196,10 @@ type jailbreakRuleset struct {
 	excludes []jailbreakKeywordRule
 	// presetExcludes are the per-preset deny lists, keyed by preset id.
 	presetExcludes map[string][]jailbreakKeywordRule
+	// keywordsEnabled is the master switch for keyword rules. Off (the default)
+	// means the include rules of every preset, synced or hand-made, never arm a
+	// request on their own; exact bindings still do.
+	keywordsEnabled bool
 	// keyExact holds key-scoped bindings: map[apiKeyID]map[modelID]config.
 	// They outrank the same model's entry in exact, so a resold key can carry
 	// a different persona than the operator's own.
@@ -265,6 +269,12 @@ func (r *Repo) ResolveJailbreakDoc(apiKeyID string, ids ...string) (*JailbreakDo
 			return nil, nil // this preset denies the request
 		}
 		return doc, nil // authoritative, even when the preset prompt is empty
+	}
+
+	// Keyword rules arm a request on nobody's say-so but the preset's own, so
+	// they are off until the operator turns them on.
+	if !rs.keywordsEnabled {
+		return nil, nil
 	}
 
 	best := -1
@@ -430,6 +440,12 @@ func (r *Repo) buildJailbreakRuleset() (*jailbreakRuleset, error) {
 		return nil, fmt.Errorf("list jailbreak bindings: %w", err)
 	}
 
+	keywordsEnabled, err := r.GetJailbreakKeywordsEnabled()
+	if err != nil {
+		return nil, err
+	}
+	rs.keywordsEnabled = keywordsEnabled
+
 	// Flatten the global exclude list first, then the per-preset rules in
 	// preset-id order so the length tie-break is stable.
 	globalExcludes, err := r.GetJailbreakExcludes()
@@ -499,6 +515,41 @@ func (r *Repo) GetJailbreakExcludes() ([]JailbreakKeyword, error) {
 		return nil, fmt.Errorf("parse jailbreak excludes: %w", err)
 	}
 	return NormalizeJailbreakKeywords(rules)
+}
+
+// GetJailbreakKeywordsEnabled reports whether keyword rules may arm a request.
+// It defaults to off: nothing is stored on a fresh install.
+func (r *Repo) GetJailbreakKeywordsEnabled() (bool, error) {
+	var raw string
+	err := r.db.QueryRowContext(
+		context.Background(),
+		`SELECT value FROM kv WHERE scope = ? AND key = ? LIMIT 1`,
+		jailbreakScope, jailbreakKeywordsEnabledKey,
+	).Scan(&raw)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return raw == "true", nil
+}
+
+// SetJailbreakKeywordsEnabled turns keyword rules on or off for every request.
+func (r *Repo) SetJailbreakKeywordsEnabled(enabled bool) error {
+	value := "false"
+	if enabled {
+		value = "true"
+	}
+	if _, err := r.db.ExecContext(context.Background(),
+		`INSERT INTO kv (scope, key, value) VALUES (?, ?, ?)
+		 ON CONFLICT(scope, key) DO UPDATE SET value = excluded.value`,
+		jailbreakScope, jailbreakKeywordsEnabledKey, value,
+	); err != nil {
+		return err
+	}
+	r.invalidateJailbreakRuleset()
+	return nil
 }
 
 // SaveJailbreakExcludes replaces the global exclude list.
@@ -625,6 +676,13 @@ func (r *Repo) ExplainJailbreakDoc(apiKeyID string, ids ...string) (*JailbreakMa
 			PresetName: doc.Name,
 			MatchedID:  id,
 			Detail:     "An exact binding on this id wins over every keyword rule.",
+		}, nil
+	}
+	if !rs.keywordsEnabled {
+		return &JailbreakMatch{
+			Injected: false,
+			Reason:   "keywords-off",
+			Detail:   "Keyword matching is off, which is the default: a model is injected only when it or its combo is bound to a preset. Bind it, or turn keyword matching on.",
 		}, nil
 	}
 	best := -1

@@ -58,14 +58,16 @@ const jailbreakSyncScope = "jailbreak_sync"
 // unit by the worker, and a list the operator can reorder is one value.
 const jailbreakSyncSourceKey = "sources"
 
-// Seeded on first read so a fresh install has a library worth looking at. The
-// operator can delete it, and deleting it changes nothing about the presets it
-// already wrote.
+// Seeded on first read so a fresh install can see the library it could follow.
+// It is seeded OFF: following a third-party repository downloads its prompts,
+// and nothing should be fetched from an outside source until the operator
+// turns it on. The operator can delete it, and deleting it changes nothing
+// about the presets it already wrote.
 func defaultJailbreakSyncSources() []JailbreakSyncSource {
 	return []JailbreakSyncSource{{
 		ID:      "jailbreaks-default",
 		Target:  "togg53192-cmd/jailbreaks",
-		Enabled: true,
+		Enabled: false,
 	}}
 }
 

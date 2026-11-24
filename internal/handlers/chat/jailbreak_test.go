@@ -453,6 +453,9 @@ func TestKeywordArmedPresetInjectsIntoUpstream(t *testing.T) {
 	seedConnDB(t, database, "deepseek", "conn-jb5", "sk-jb5", srv.URL)
 
 	repo := db.NewRepo(database)
+	if err := repo.SetJailbreakKeywordsEnabled(true); err != nil {
+		t.Fatalf("enable keyword rules: %v", err)
+	}
 	h := NewChatHandler(repo)
 
 	if err := repo.SaveJailbreakPreset(&db.JailbreakDoc{
@@ -551,6 +554,9 @@ func TestComboLegKeywordInjectsIntoUpstream(t *testing.T) {
 	seedConnDB(t, database, "deepseek", "conn-jb7", "sk-jb7", srv.URL)
 
 	repo := db.NewRepo(database)
+	if err := repo.SetJailbreakKeywordsEnabled(true); err != nil {
+		t.Fatalf("enable keyword rules: %v", err)
+	}
 	h := NewChatHandler(repo)
 
 	comboModels := []string{"deepseek/deepseek-chat"}
@@ -584,5 +590,61 @@ func TestComboLegKeywordInjectsIntoUpstream(t *testing.T) {
 	}
 	if !strings.Contains(got, "COMBO LEG KEYWORD RULE") {
 		t.Errorf("combo leg keyword did not reach upstream body: %s", got)
+	}
+}
+
+// The control for the keyword tests above, with the install in its default
+// state: the same preset and the same request do not reach the upstream. Only a
+// binding on the combo does, which is what a user switching it on gets.
+func TestKeywordPresetDoesNotInjectByDefaultButAComboBindingDoes(t *testing.T) {
+	var gotBody atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		gotBody.Store(string(raw))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"id":"x","choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":1,"completion_tokens":1}}`))
+	}))
+	defer srv.Close()
+
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+	if _, err := database.Exec(`DELETE FROM providerConnections WHERE id IN ('conn-1','conn-2')`); err != nil {
+		t.Fatalf("clear seeded connections: %v", err)
+	}
+	seedConnDB(t, database, "deepseek", "conn-jb9", "sk-jb9", srv.URL)
+
+	repo := db.NewRepo(database) // keyword rules stay off, as on a fresh install
+	h := NewChatHandler(repo)
+	if err := repo.SaveJailbreakPreset(&db.JailbreakDoc{
+		ID:       "kw",
+		Name:     "KW",
+		Prompt:   "DEFAULT OFF RULE",
+		Keywords: []db.JailbreakKeyword{{Text: "deepseek"}},
+	}); err != nil {
+		t.Fatalf("save preset: %v", err)
+	}
+
+	send := func() string {
+		gotBody.Store("")
+		body := []byte(`{"model":"deepseek/deepseek-chat","max_tokens":50,"messages":[{"role":"user","content":"hi"}]}`)
+		modelInfo := &ModelInfo{Provider: "deepseek", Model: "deepseek-chat", ConnectionID: "conn-jb9"}
+		h.handleSingleModel(context.Background(), httptest.NewRecorder(), body, modelInfo, false, false)
+		got, _ := gotBody.Load().(string)
+		if got == "" {
+			t.Fatal("upstream never called")
+		}
+		return got
+	}
+
+	if got := send(); strings.Contains(got, "DEFAULT OFF RULE") {
+		t.Errorf("a keyword-only preset reached the upstream with keyword rules off: %s", got)
+	}
+	// Binding the id the client sent arms it, with keyword rules still off.
+	if err := repo.SetJailbreakModelPreset("deepseek/deepseek-chat", "kw", true); err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+	if got := send(); !strings.Contains(got, "DEFAULT OFF RULE") {
+		t.Errorf("a bound id did not get its preset: %s", got)
 	}
 }

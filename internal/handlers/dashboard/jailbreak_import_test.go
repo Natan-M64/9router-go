@@ -352,6 +352,9 @@ func TestJailbreakImportFromGithubEndToEnd(t *testing.T) {
 	})
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
+	if err := repo.SetJailbreakKeywordsEnabled(true); err != nil {
+		t.Fatalf("enable keyword rules: %v", err)
+	}
 
 	res, err := fg.importer().importPresets(t.Context(), repo, "owner/repo", "")
 	if err != nil {
@@ -594,6 +597,9 @@ func TestHandleUploadJailbreakPreset(t *testing.T) {
 	t.Run("writes the preset with the derived keyword chain", func(t *testing.T) {
 		repo, cleanup := setupTestDB(t)
 		defer cleanup()
+		if err := repo.SetJailbreakKeywordsEnabled(true); err != nil {
+			t.Fatalf("enable keyword rules: %v", err)
+		}
 		router := setupTestRouterWithHandler(NewDashboardHandler(repo))
 
 		req, _ := uploadRequest(t, "file", "deepseek v4.md", "UPLOADED RULE")
