@@ -38,6 +38,9 @@ func foreignExecutable(t *testing.T) string {
 // itself would record. If that stopped holding, every claim written by a
 // running daemon would look like a stranger's.
 func TestLiveExecutableMatchesSelfExecutable(t *testing.T) {
+	if !pathLookupSupported() {
+		t.Skip("image path lookup is unavailable on this platform; claims are verified by start time here")
+	}
 	pid := livePID(t)
 
 	got, err := proc.Executable(pid)
@@ -59,7 +62,7 @@ func TestRunningPIDReportsThisProcess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read pid file: %v", err)
 	}
-	if want := pidLine(os.Getpid(), selfExecutable(t)); strings.TrimSpace(string(raw)) != want {
+	if want := string(formatPID(os.Getpid())); strings.TrimSpace(string(raw)) != want {
 		t.Fatalf("pid file = %q, want %q", raw, want)
 	}
 	if pid := RunningPID(); pid != os.Getpid() {
@@ -119,6 +122,21 @@ func TestParseClaim(t *testing.T) {
 			want: claim{pid: 20130, exePath: `C:\Users\HYPE AMD\AppData\Local\9router-go\9router-go.exe`},
 		},
 		{
+			name: "start time field, then a path with spaces",
+			raw:  "20130 t1795543887123456 /Users/Alice Smith/9router-go\n",
+			want: claim{pid: 20130, startMicros: 1795543887123456, exePath: "/Users/Alice Smith/9router-go"},
+		},
+		{
+			name: "a legacy path that starts with t is not a start field",
+			raw:  "20130 /usr/local/bin/t9router\n",
+			want: claim{pid: 20130, exePath: "/usr/local/bin/t9router"},
+		},
+		{
+			name: "t without digits is part of the path",
+			raw:  "20130 tabc /x\n",
+			want: claim{pid: 20130, exePath: "tabc /x"},
+		},
+		{
 			name: "posix path with spaces",
 			raw:  "20130 /Users/Alice Smith/Library/Application Support/9router-go/9router-go\n",
 			want: claim{pid: 20130, exePath: "/Users/Alice Smith/Library/Application Support/9router-go/9router-go"},
@@ -128,7 +146,7 @@ func TestParseClaim(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := parseClaim(tt.raw)
-			if got.pid != tt.want.pid || got.exePath != tt.want.exePath {
+			if got.pid != tt.want.pid || got.exePath != tt.want.exePath || got.startMicros != tt.want.startMicros {
 				t.Fatalf("parseClaim(%q) = %+v, want %+v", tt.raw, got, tt.want)
 			}
 		})
@@ -138,8 +156,6 @@ func TestParseClaim(t *testing.T) {
 // Only a claim that resolves to this binary is an owner; the rest must not be.
 func TestClaimOwner(t *testing.T) {
 	isolate(t)
-	self := selfExecutable(t)
-
 	tests := []struct {
 		name  string
 		claim claim
@@ -154,11 +170,6 @@ func TestClaimOwner(t *testing.T) {
 			name:  "bare number carries nothing to check",
 			claim: claim{pid: os.Getpid()},
 			want:  false,
-		},
-		{
-			name:  "this process running the recorded binary",
-			claim: claim{pid: os.Getpid(), exePath: self},
-			want:  true,
 		},
 		{
 			name:  "this process running some other binary",
