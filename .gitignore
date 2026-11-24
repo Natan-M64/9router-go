@@ -58,6 +58,7 @@ node_modules/
 web/node_modules/
 stitch-screens/
 stitch-screenshots/
+.serena/
 
 # Git worktrees — each is a nested repo, so `git add -A` will happily stage
 # them as embedded gitlinks. A worktree caught in a commit has to be undone
