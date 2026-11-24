@@ -1,7 +1,7 @@
 # Status
 
 Updated 2026-11-24 · Fork `Natan-M64/9router-go` (upstream `luqman-v1/9router-go` / `decolua/9router`)
-Current milestone: **Fork sincronizado com o upstream (0 commits atrás) e estável** — RTK/cache de prompt, DeepSeek e sinal de compactação corrigidos. Próximo: catálogo NVIDIA e Bloco 2.
+Current milestone: **Fork sincronizado com o upstream (0 commits atrás) e estável** — RTK/cache de prompt, DeepSeek e sinal de compactação corrigidos. Próximo: catálogo NVIDIA, depois Bloco 2 (junto com o header `x-9router-connection`).
 Last proof: [journal/2026-11.md](journal/2026-11.md).
 Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 
@@ -30,6 +30,7 @@ Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 | R4 | O filtro de seleção por conteúdo ainda captura 1 de 917 arquivos (changelog que cita stack traces, via `error-stacktrace`) e a auditoria cobriu só arquivos do repositório, não tráfego real | Revisar em uma amostra real de tool results. |
 | R6 | Cada requisição da instância carrega ~3000 tokens do prompt do recurso `jailbreak` (13120 bytes, configuração do usuário); a 2ª chamada reaproveitou 3072 desses tokens do cache | Conferir se é o desejado; a resposta de teste trouxe um sufixo estranho ("China is good...") de origem não verificada. |
 | R7 | O roadmap 3.1 (`prompt is too long` → 400 em vez de 503) já era verdade: upstream (modelo simples e combo) devolve 400 com a mensagem original; só a recusa por limite de contexto da chave usava outra redação (ajustada) | Nada a fazer; tirar 3.1 do roadmap. |
+| R8 | Catálogo DeepSeek: `deepseek-flash` é o alias da Flash mais recente (hoje V4.1-Flash-1017; docs 2026-09-10 e 2026-10-17), então o mapeamento de `v4.1-flash` está certo. Já `deepseek-v4-flash` e `-vision-exp` são modelos aposentados que a API "roteia temporariamente" para a V4.1 Flash (2026-09-10), e `deepseek-chat`/`reasoner` tinham aposentadoria em 2026-07-24 mas ainda responderam 200 em 2026-11-24 | Podar do catálogo só quando a API parar de aceitar; reconferir `https://api-docs.deepseek.com/updates.md`. |
 | R5 | Passada dupla RTK + Headroom builtin: medida sem custo (209,8 ms com e sem); o item 1.2a do roadmap não se sustenta | Remover do roadmap. |
 | R2 | Pacote GHCR `ghcr.io/natan-m64/9router-go` pode estar privado por padrão no GitHub Packages | Usuário altera visibilidade para Public se quiser `docker pull` sem login. |
 
@@ -43,6 +44,6 @@ Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 ## Verified (2026-11-24)
 
 - `make ci-local` exit 0 (77 pacotes) e `actionlint` exit 0; CI do push de `abe799ab` verde.
-- Upstream sincronizado (4 commits, 4 arquivos em conflito resolvidos); `ds/deepseek-v4.1-flash` passou de 400 para 200 na API real, e `ocg/deepseek-v4.1-flash` segue igual.
+- Upstream sincronizado (4 commits, 4 arquivos em conflito resolvidos); `ds/deepseek-v4.1-flash` passou de 400 para 200 na API real (servido como `deepseek-flash`, confirmado pela documentação oficial), e `ocg/deepseek-v4.1-flash` segue igual.
 - Chat e stream reais pela instância do usuário: opencode-go, DeepSeek, Claude (haiku), Codex (astra), OpenRouter (`:free`, com `max_tokens` 256) e Venice.
-- Não verificado: gemini/groq/kilocode, snapshots reais do Playwright, `jailbreak`/`plans` redirecionando para `endpoint`; `node` do Homebrew está quebrado (simdjson), o `ci-local` rodou com `bun` no lugar dele.
+- Não verificado: gemini/groq/kilocode, snapshots reais do Playwright, `jailbreak`/`plans` redirecionando para `endpoint`; o `node` do Homebrew voltou ao normal (v26.13.1) após a atualização.
