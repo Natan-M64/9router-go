@@ -82,7 +82,7 @@ jobs:
           git push
 
       - name: Generate site
-        run: go run ./tools/sitegen -out _site
+        run: go run ./tools/sitegen -repo "${{ github.repository }}" -out _site
 
       # Guards the one promise the redirect makes: every path a client can ask
       # for must resolve to the current invite, and the invite must appear in
