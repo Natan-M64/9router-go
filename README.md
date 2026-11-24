@@ -181,6 +181,8 @@ docker run -d --name 9router-go --restart unless-stopped \
 
 📦 [All release binaries](https://github.com/luqman-v1/9router-go/releases/latest) • 🔨 [Build from source](#-setup-guide)
 
+The `Natan-M64/9router-go` fork also builds multi-arch (`linux/amd64`, `linux/arm64`) non-root images to `ghcr.io/natan-m64/9router-go`. They are published only for release tags, not for every commit, and `:latest` moves only for stable tags: a tag with a hyphen (a prerelease such as `v1.2.3-exp.1`) never takes it. A pushed commit that changes only Markdown, `docs/`, `wiki/`, `screenshots/` or `site/` does not start the CI pipeline.
+
 ---
 
 ## 💡 Key Features
@@ -189,6 +191,7 @@ docker run -d --name 9router-go --restart unless-stopped \
 - 💱 Cost display in USD, IDR, EUR and ten more currencies — editable rate table, dual display, one-click refresh from a public provider
 - 🔌 OpenAI Chat, Claude Messages, Gemini, Ollama-compatible, Responses, embeddings, media, search, web tools, rerank
 - 🔁 Combos with fallback, round-robin, sticky routing, fusion, capability-aware reordering
+- 📥 Combos import and export as JSON (`Import JSON` / `Export JSON` on the Combos page): the `9router-combos-v1` format, or an OmniRoute export (`omniroute-combos-v1`) with automatic or assisted provider mapping
 - 👥 Per-provider executors, OAuth refresh, reactive 401 retry
 - 📡 Live usage + console-log SSE streams, stall detection
 - 💾 SQLite WAL persistence, outbound proxy support, self-update, MITM commands, Docker, cross-compilation
@@ -324,6 +327,22 @@ DATA_DIR=/srv/9router ./9router-go              # different data dir
 DB_PATH=/srv/9router/data.sqlite ./9router-go   # explicit SQLite file
 HOST=127.0.0.1 ./9router-go                     # localhost only, behind a reverse proxy
 ```
+
+### Background daemon and on-demand mode
+
+```bash
+./9router-go start      # run in the background and return (same as --background / -d)
+./9router-go status     # is it running?
+./9router-go logs       # tail of the background log
+./9router-go restart
+./9router-go stop
+```
+
+`9router-go service` manages the gateway as a service (boot autostart plus start/stop/restart). On macOS 27 and later the background gateway is recognised by its process start time, because the OS no longer exposes a process's executable path; the pid file holds `PID t<microseconds> EXE`.
+
+To save battery, CPU and memory, `--idle-timeout` (env `IDLE_TIMEOUT`, for example `15m`) shuts the gateway down after that long with no active requests, and socket activation starts it again on the next request. The gateway accepts a `launchd` socket on macOS and a `systemd` socket (`LISTEN_FDS`) on Linux. `9router-go maintain` runs one OAuth token refresh and the quota auto-pings that are due, only when needed, then exits (`--dry-run` reports without any network call, `--quiet` prints nothing when nothing is due).
+
+On macOS, `scripts/macos-on-demand.sh install|uninstall|status` sets up a `launchd` agent with socket activation and a periodic `maintain` timer. Defaults: port `20130`, `IDLE_TIMEOUT=15m`, `MAINTAIN_INTERVAL=1800` seconds; override them in the environment when you run `install`.
 
 ### 🔑 Dashboard Login & Fresh Install
 
@@ -470,6 +489,8 @@ Issues and pull requests use templates, so pick the right one rather than openin
 
 PRs follow the checks CI runs: `go vet ./...`, `go test -count=1 ./...`, `make test-integration`, plus `cd web && bun test` and `make vet-svelte` for anything touching the dashboard. Before writing code, skim [`AGENTS.md`](AGENTS.md) — provider isolation and the Go/Svelte conventions there are enforced by review.
 
+Run `make ci-local` before pushing: it runs the gates that need no CI runner, in CI order and stopping at the first failure (oxlint, the svelte-check ratchet, frontend unit tests, `go vet`, `go test -count=1 ./...`). It does not replace the race, integration, cross-compile and Docker jobs.
+
 Everyone whose commit landed in the repository is credited on the wiki's [**Owner & Contributors**](https://luqman-v1.github.io/9router-go/team.html) page — photo, username, and contribution count, generated from the GitHub API.
 
 ## 📚 Docs
@@ -482,6 +503,9 @@ Repository references:
 - [`DATABASE.md`](DATABASE.md) — SQLite/PostgreSQL schema & operator contract
 - [`ROADMAP.md`](ROADMAP.md) — proposals only, not current behavior
 - [`CHANGELOG.md`](CHANGELOG.md) — release history (Go **v1.9.17**, upstream baseline `decolua/9router`). Work merged since the last tag lives in [`.changes/`](.changes/) and is folded in at the next release; the dashboard's changelog modal shows both. Check what you are running with `9router-go version`.
+- [`docs/STATUS.md`](docs/STATUS.md) — where the project stands, what is next and what is still unverified
+- [`docs/optimization-roadmap.md`](docs/optimization-roadmap.md) — the prompt-cache and token plan, with what was done and what measurement refuted
+- [`docs/RTK_FILTERS.md`](docs/RTK_FILTERS.md) — how RTK filters are chosen and how to write one
 - [`docs/TELEGRAM_RELEASE_NOTIFICATIONS.md`](docs/TELEGRAM_RELEASE_NOTIFICATIONS.md) — one-time setup for the release notice posted to Telegram
 
 ## Credits
