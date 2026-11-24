@@ -30,6 +30,10 @@ type RawFilterMatch struct {
 	Commands    []string `json:"commands"`
 	Patterns    []string `json:"patterns"`
 	OutputTypes []string `json:"outputTypes"`
+	// MinPatternHits overrides how many distinct patterns must match before the
+	// content alone selects the filter (default minContentPatternHits). A filter
+	// whose single pattern is an unmistakable signature sets it to 1.
+	MinPatternHits int `json:"minPatternHits"`
 }
 
 type RawFilterRules struct {
@@ -66,6 +70,7 @@ type RTKFilter struct {
 	Priority         int
 	Commands         []*regexp.Regexp
 	Patterns         []*regexp.Regexp
+	MinPatternHits   int
 	IncludePatterns  []*regexp.Regexp
 	DropPatterns     []*regexp.Regexp
 	CollapsePatterns []*regexp.Regexp
@@ -208,6 +213,7 @@ func LoadFilters() []*RTKFilter {
 				Priority:         raw.Priority,
 				Commands:         compileRegexList(raw.Match.Commands),
 				Patterns:         compileRegexList(raw.Match.Patterns),
+				MinPatternHits:   raw.Match.MinPatternHits,
 				IncludePatterns:  compileRegexList(raw.Rules.IncludePatterns),
 				DropPatterns:     compileRegexList(raw.Rules.DropPatterns),
 				CollapsePatterns: compileRegexList(raw.Rules.CollapsePatterns),
@@ -341,6 +347,10 @@ func normalizeCommand(cmd string) string {
 	return "git " + strings.Join(fields[i:], " ")
 }
 
+// minContentPatternHits is how many distinct patterns of a filter must match
+// before the content alone selects it.
+const minContentPatternHits = 2
+
 func MatchFilter(text string, command string, cfg RTKConfig) *RTKFilter {
 	filters := LoadFilters()
 	trimmedCmd := normalizeCommand(strings.TrimSpace(command))
@@ -391,9 +401,25 @@ func MatchFilter(text string, command string, cfg RTKConfig) *RTKFilter {
 		if trimmedCmd != "" && len(f.Commands) > 0 {
 			continue
 		}
+		// One matching pattern is not evidence of a command's output: the
+		// patterns are written to recognise lines within that output, and most
+		// are loose enough to occur in ordinary text ("failed", "INFO", any
+		// line that looks like a path). Requiring two distinct patterns keeps
+		// the cases that carry a real signature (a diff header and its hunks,
+		// a ping summary) and stops a file or a web page from being rewritten
+		// as the output of a tool it never came from. A filter with a single
+		// pattern is selected by its command only.
+		need := f.MinPatternHits
+		if need <= 0 {
+			need = minContentPatternHits
+		}
+		hits := 0
 		for _, patRe := range f.Patterns {
 			if patRe.MatchString(text) {
-				return f
+				hits++
+				if hits >= need {
+					return f
+				}
 			}
 		}
 	}

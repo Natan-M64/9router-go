@@ -17,20 +17,23 @@ func TestGitHubCLIFilterIsNotSelectedByWordsEndingInX(t *testing.T) {
 			t.Errorf("gh filter selected for %q", text)
 		}
 	}
-	// The marker the pattern was written for still selects the filter.
-	cli := "X build-and-test  main  push  1m\n✓ lint  main  push  30s\n"
+	// The marker the pattern was written for still selects the filter, together
+	// with a second sign of gh output (content needs two distinct patterns).
+	cli := "X build-and-test  main  push  1m\nhttps://github.com/o/r/actions/runs/1\n"
 	if f := MatchFilter(cli, "", DefaultRTKConfig()); f == nil || f.ID != "gh" {
 		t.Fatalf("a real gh failure line no longer selects the gh filter: %v", f)
 	}
 }
 
 // RTK selects a filter before it strips ANSI, and gh may indent or colour the
-// marker, so the anchored pattern must still find it.
+// marker, so the anchored pattern must still find it. A second sign of gh output
+// is present because content needs two distinct patterns to select a filter.
 func TestGitHubCLIFilterSelectsIndentedAndColouredFailureMarker(t *testing.T) {
+	const link = "https://github.com/o/r/actions/runs/1\n"
 	for _, cli := range []string{
-		"  X build-and-test  main  push  1m\n",
-		"\x1b[31mX\x1b[0m build-and-test  main  push  1m\n",
-		"\x1b[31mX build-and-test\x1b[0m  main  push  1m\n",
+		"  X build-and-test  main  push  1m\n" + link,
+		"\x1b[31mX\x1b[0m build-and-test  main  push  1m\n" + link,
+		"\x1b[31mX build-and-test\x1b[0m  main  push  1m\n" + link,
 	} {
 		if f := MatchFilter(cli, "", DefaultRTKConfig()); f == nil || f.ID != "gh" {
 			t.Errorf("gh filter not selected for %q: %v", cli, f)

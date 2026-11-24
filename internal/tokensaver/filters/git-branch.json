@@ -7,7 +7,7 @@
   "match": {
     "outputTypes": ["git-branch"],
     "commands": ["^git\\s+(?:branch|checkout|switch)\\b"],
-    "patterns": ["^\\*\\s+\\S+", "Switched to (?:a new )?branch", "Already on"]
+    "patterns": ["^\\*[ \\t]+(?:\\S+|\\([^)]*\\))[ \\t]*$", "Switched to (?:a new )?branch", "Already on"]
   },
   "rules": {
     "stripAnsi": true,
