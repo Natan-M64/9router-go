@@ -133,6 +133,12 @@ func NormalizeFilterCategory(cat string) string {
 }
 
 func compileRegexSafe(pat string) *regexp.Regexp {
+	return compileRegexFlags(pat, "(?im)")
+}
+
+// compileRegexFlags compiles a filter pattern under the given flag prefix. The
+// shared default is case-insensitive multiline; see compileRegexSafe.
+func compileRegexFlags(pat, flags string) *regexp.Regexp {
 	if pat == "" {
 		return nil
 	}
@@ -144,7 +150,7 @@ func compileRegexSafe(pat string) *regexp.Regexp {
 	// output — "Here is the diff:", a shell prompt, a leading blank — defeated
 	// every anchored detection pattern and the body fell through to the
 	// generic filter. Upstream anchors with /m precisely so it does not.
-	re, err := regexp.Compile("(?im)" + pat)
+	re, err := regexp.Compile(flags + pat)
 	if err != nil {
 		// Fallback without prefix
 		re, err = regexp.Compile(pat)
@@ -153,6 +159,20 @@ func compileRegexSafe(pat string) *regexp.Regexp {
 		}
 	}
 	return re
+}
+
+// compileSelectionList compiles the patterns that select a filter from the text
+// alone. They are signatures of a command's output, and a CLI prints its status
+// words in one exact case ("FAIL", "ok", "X"), so they are matched exactly; a
+// pattern that wants case folding says so with (?i).
+func compileSelectionList(patterns []string) []*regexp.Regexp {
+	res := make([]*regexp.Regexp, 0, len(patterns))
+	for _, p := range patterns {
+		if re := compileRegexFlags(p, "(?m)"); re != nil {
+			res = append(res, re)
+		}
+	}
+	return res
 }
 
 func compileRegexList(patterns []string) []*regexp.Regexp {
@@ -212,7 +232,7 @@ func LoadFilters() []*RTKFilter {
 				Category:         normCat,
 				Priority:         raw.Priority,
 				Commands:         compileRegexList(raw.Match.Commands),
-				Patterns:         compileRegexList(raw.Match.Patterns),
+				Patterns:         compileSelectionList(raw.Match.Patterns),
 				MinPatternHits:   raw.Match.MinPatternHits,
 				IncludePatterns:  compileRegexList(raw.Rules.IncludePatterns),
 				DropPatterns:     compileRegexList(raw.Rules.DropPatterns),

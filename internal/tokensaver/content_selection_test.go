@@ -86,3 +86,26 @@ func TestGoTestFilterNeedsTheExactStatusWord(t *testing.T) {
 		t.Errorf("real go test failure no longer selects test-go: %v", f)
 	}
 }
+
+// Selection patterns are signatures of a command's output, and a CLI prints its
+// status words in one exact case, so they are matched exactly. The shared
+// compiler stays case-insensitive for the include and drop lists, and a
+// selection pattern that wants case folding asks for it with (?i).
+func TestSelectionPatternsAreCaseSensitive(t *testing.T) {
+	exact := compileSelectionList([]string{`^FAIL\s+`, `(?i)^warning:`})
+	if len(exact) != 2 {
+		t.Fatalf("compiled %d patterns, want 2", len(exact))
+	}
+	if exact[0].MatchString("fail the test") {
+		t.Error("selection pattern matched the wrong case")
+	}
+	if !exact[0].MatchString("FAIL\tpkg") {
+		t.Error("selection pattern missed its own case")
+	}
+	if !exact[1].MatchString("WARNING: x") {
+		t.Error("an explicit (?i) was not honoured")
+	}
+	if !compileRegexList([]string{`^FAIL\s+`})[0].MatchString("fail the test") {
+		t.Error("the shared list compiler must stay case-insensitive")
+	}
+}
