@@ -1743,7 +1743,7 @@ export const api = {
     const res = await request<any>('/api/combos')
     return Array.isArray(res) ? res : (res.combos || [])
   },
-  createCombo: (payload: { id?: string; name: string; kind?: string; models: string | string[]; strategy?: string; matchRules?: SmartRule[]; customPrompt?: string }) =>
+  createCombo: (payload: { id?: string; name: string; kind?: string; models: string | string[]; strategy?: string; matchRules?: SmartRule[] | string; customPrompt?: string }) =>
     request<{ success: boolean; id: string }>('/api/combos', {
       method: 'POST',
       body: JSON.stringify(payload),

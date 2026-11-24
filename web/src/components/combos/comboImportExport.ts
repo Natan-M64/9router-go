@@ -1,8 +1,40 @@
 import { PROVIDER_ID_TO_ALIAS } from '../../lib/models'
-import type { Combo } from '../../api/client'
-import { getComboModels } from './types'
+import type { Combo, SmartRule } from '../../api/client'
+import { DEFAULT_SMART_RULE_MAX_MEMBERS, getComboModels } from './types'
 
 export type ImportFormat = 'omniroute' | '9router'
+
+/**
+ * Normalizes a combo's matchRules from an imported file into a shape the API
+ * accepts. The backend (combos/smart DecodeRules) takes a JSON string of rule
+ * objects or an array of rule objects. A bare keyword string is not a rule
+ * object, so it becomes a keyword include rule with the default member cap.
+ */
+export function importMatchRules(raw: unknown): string | SmartRule[] | undefined {
+  if (typeof raw === 'string') return raw.trim() ? raw : undefined
+  if (!Array.isArray(raw)) return undefined
+  const rules: SmartRule[] = []
+  raw.forEach((entry: unknown, i: number) => {
+    if (typeof entry === 'string') {
+      const pattern = entry.trim()
+      if (!pattern) return
+      rules.push({
+        id: `r${i + 1}`,
+        pattern,
+        mode: 'keyword',
+        effect: 'include',
+        enabled: true,
+        maxMembers: DEFAULT_SMART_RULE_MAX_MEMBERS,
+        allKinds: false,
+      })
+      return
+    }
+    if (entry && typeof entry === 'object' && typeof (entry as { pattern?: unknown }).pattern === 'string') {
+      rules.push(entry as SmartRule)
+    }
+  })
+  return rules.length ? rules : undefined
+}
 
 export interface ProviderMappingEntry {
   rawProvider: string
@@ -22,7 +54,7 @@ export interface ParsedImportCombo {
   steps: ParsedImportStep[]
   strategy: string
   customPrompt?: string
-  matchRules?: string[]
+  matchRules?: string | SmartRule[]
 }
 
 export interface ParsedCombosImport {
@@ -231,16 +263,12 @@ export function parseCombosImport(rawJson: string): ParsedCombosImport {
           ? obj.system_message
           : undefined
 
-    const matchRules = Array.isArray(obj.matchRules)
-      ? obj.matchRules.filter((r): r is string => typeof r === 'string' && r.trim() !== '')
-      : undefined
-
     combos.push({
       name,
       steps,
       strategy: mapImportStrategy(obj.strategy),
       customPrompt,
-      matchRules: matchRules?.length ? matchRules : undefined,
+      matchRules: importMatchRules(obj.matchRules),
     })
   }
 
@@ -262,7 +290,7 @@ export function buildCombosFromImport(
   name: string
   models: string[]
   strategy: string
-  matchRules?: string[]
+  matchRules?: string | SmartRule[]
   customPrompt?: string
 }> {
   const mapping = new Map<string, string>()
