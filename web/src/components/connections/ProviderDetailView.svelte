@@ -104,6 +104,7 @@
   import ProviderIcon from './ProviderIcon.svelte'
   import {
     computeProviderThinkingOptions,
+    formatModelThinkingLevels,
     formatThinkingOptionLabel,
     resolveProviderThinkingSuffix,
   } from './providerThinking'
@@ -5013,12 +5014,24 @@
                     </div>
                   {/if}
                   {#if rowCaps?.reasoning}
+                    {@const modelLevelsLabel = formatModelThinkingLevels(rowCaps?.thinkingLevels)}
                     <div class="relative inline-flex group/tt">
                       <span class="material-symbols-outlined leading-none cursor-help text-text-muted/70" style="font-size: 12px;">neurology</span>
-                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 w-max max-w-56 rounded px-2 py-1 text-[11px] leading-snug bg-gray-900 text-white opacity-0 group-hover/tt:opacity-100 transition-opacity duration-150 whitespace-normal shadow-lg">
-                        Reasoning — Supports reasoning / thinking
+                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 w-max max-w-64 rounded px-2 py-1 text-[11px] leading-snug bg-gray-900 text-white opacity-0 group-hover/tt:opacity-100 transition-opacity duration-150 whitespace-normal shadow-lg">
+                        {modelLevelsLabel ? `Thinking levels: ${modelLevelsLabel}` : 'Reasoning — Supports reasoning / thinking'}
                       </div>
                     </div>
+                  {/if}
+                  {#if rowCaps?.thinkingLevels?.length}
+                    {@const levelsBadge = formatModelThinkingLevels(rowCaps.thinkingLevels)}
+                    {#if levelsBadge}
+                      <span
+                        class="ml-1 inline-flex items-center rounded bg-primary/10 px-1.5 py-0.2 text-[9px] font-medium text-primary/90 border border-primary/20"
+                        title="Supported thinking levels (append as model(level) or select above)"
+                      >
+                        {levelsBadge}
+                      </span>
+                    {/if}
                   {/if}
                   {#if rowCaps?.jailbreak}
                     <div class="relative inline-flex group/tt">

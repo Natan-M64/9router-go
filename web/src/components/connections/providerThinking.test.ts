@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   computeProviderThinkingOptions,
+  formatModelThinkingLevels,
   formatThinkingOptionLabel,
   resolveProviderThinkingSuffix,
 } from './providerThinking'
@@ -98,5 +99,21 @@ describe('formatThinkingOptionLabel', () => {
     expect(formatThinkingOptionLabel('auto')).toBe('Auto')
     expect(formatThinkingOptionLabel('off')).toBe('Off')
     expect(formatThinkingOptionLabel('xhigh')).toBe('Xhigh')
+  })
+})
+
+describe('formatModelThinkingLevels', () => {
+  test('returns null for empty or undefined levels', () => {
+    expect(formatModelThinkingLevels(undefined)).toBeNull()
+    expect(formatModelThinkingLevels([])).toBeNull()
+  })
+
+  test('formats levels and maps none to off', () => {
+    expect(formatModelThinkingLevels(['none', 'low', 'medium', 'high'])).toBe(
+      'off · low · medium · high',
+    )
+    expect(formatModelThinkingLevels(['low', 'high', 'max'])).toBe(
+      'low · high · max',
+    )
   })
 })

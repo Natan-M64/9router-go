@@ -88,3 +88,17 @@ export function formatThinkingOptionLabel(opt: string): string {
   if (!opt) return ''
   return opt.charAt(0).toUpperCase() + opt.slice(1)
 }
+
+/**
+ * Formats per-model thinking levels for compact display on model cards.
+ * Maps 'none' to 'off' and hides internal-only markers.
+ */
+export function formatModelThinkingLevels(
+  levels: readonly string[] | undefined,
+): string | null {
+  if (!levels || levels.length === 0) return null
+  const labels = levels
+    .map((l) => (l === 'none' ? 'off' : l))
+    .filter((l) => Boolean(l))
+  return labels.length > 0 ? labels.join(' · ') : null
+}
