@@ -12,6 +12,11 @@
   import type { Combo, ComboRulesPreview, SmartRule } from '../../api/client'
   import { api } from '../../api/client'
   import { getModelCaps } from '../../lib/models'
+  import {
+    applyComboModelThinking,
+    COMBO_THINKING_OPTIONS,
+    parseComboModelThinking,
+  } from './comboThinking'
   import Button from '../../lib/ui/Button.svelte'
   import Input from '../../lib/ui/Input.svelte'
   import Modal from '../../lib/ui/Modal.svelte'
@@ -760,10 +765,23 @@
                   <Eye class="w-3 h-3 text-blue-500" />
                 </span>
               {/if}
-              {#if caps.reasoning}
+              {#if caps.reasoning || parseComboModelThinking(model).level !== ''}
+                {@const parsedThinking = parseComboModelThinking(model)}
                 <span class="inline-flex shrink-0" title="Reasoning — Supports reasoning / thinking">
                   <Brain class="w-3 h-3 text-amber-500" />
                 </span>
+                <select
+                  aria-label="Thinking level for {model}"
+                  value={parsedThinking.level}
+                  onchange={(e) => {
+                    models[idx] = applyComboModelThinking(model, e.currentTarget.value)
+                  }}
+                  class="shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-text-main focus:border-brand-500 focus:outline-none cursor-pointer"
+                >
+                  {#each COMBO_THINKING_OPTIONS as opt (opt.value)}
+                    <option value={opt.value}>{opt.label}</option>
+                  {/each}
+                </select>
               {/if}
               <div class="flex shrink-0 items-center gap-0.5">
                 <button

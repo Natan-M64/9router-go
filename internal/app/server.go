@@ -159,8 +159,16 @@ func ProvideServer(p ServerParams) *http.Server {
 
 			log.Printf("9router-go Proxy (%s) starting on port %d", updater.CurrentVersion, p.Config.Port)
 
+			ln, listenSource, err := listenForServer(addr)
+			if err != nil {
+				return fmt.Errorf("listen %s: %w", addr, err)
+			}
+			if listenSource != "tcp" {
+				log.Printf("[socket] activated via %s", listenSource)
+			}
+
 			go func() {
-				if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				if err := server.Serve(ln); err != nil && err != http.ErrServerClosed {
 					log.Fatalf("Server failed: %v", err)
 				}
 			}()
