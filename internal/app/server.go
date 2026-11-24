@@ -90,9 +90,17 @@ func ProvideServer(p ServerParams) *http.Server {
 	} else {
 		addr = fmt.Sprintf(":%d", p.Config.Port)
 	}
+
+	handler := p.Handler
+	var tracker *idleTracker
+	if p.CLIParams.IdleTimeout > 0 {
+		tracker = newIdleTracker(handler, time.Now)
+		handler = tracker
+	}
+
 	server := &http.Server{
 		Addr:    addr,
-		Handler: p.Handler,
+		Handler: handler,
 		// WriteTimeout stays unset on purpose: internal/proxy/stall.go lets an
 		// SSE stream idle for DefaultStallTimeout (6 minutes), and a write
 		// deadline would sever those streams mid-response.
@@ -139,6 +147,10 @@ func ProvideServer(p ServerParams) *http.Server {
 			startModelHealthScheduler(shutdown.Context(), p.Repo, p.ChatHandler)
 			startUptimeHeartbeat(shutdown.Context(), p.Repo)
 			startHeadroomOnBoot(p.Repo, config.ResolveDataDir())
+			if tracker != nil {
+				startIdleWatcher(shutdown.Context(), tracker, p.CLIParams.IdleTimeout, shutdown.RequestStop)
+				log.Printf("[idle] auto-shutdown enabled timeout=%s", p.CLIParams.IdleTimeout)
+			}
 			// The tamper-evident audit trail: one writer goroutine, a bounded
 			// queue, and the retention sweeper when a window is configured.
 			// It is started here rather than in a provider because it must run

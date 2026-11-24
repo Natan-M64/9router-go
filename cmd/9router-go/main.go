@@ -148,9 +148,15 @@ func buildApp(self string) *cli.App {
 				Aliases: []string{"d"},
 				Usage:   "run as a background daemon: detaches from the terminal and returns (env: 9ROUTER_BACKGROUND)",
 			},
+			&cli.DurationFlag{
+				Name:  "idle-timeout",
+				Value: app.ParseIdleTimeoutEnv(),
+				Usage: "shut down automatically after this idle duration with no active requests (e.g. 15m; env: IDLE_TIMEOUT)",
+			},
 		},
 		Commands: []*cli.Command{
 			dbCommand(),
+			maintainCommand(),
 			{
 				Name:  "version",
 				Usage: "Display version details and check for updates",

@@ -2,6 +2,8 @@ package app
 
 import (
 	"os"
+	"strings"
+	"time"
 
 	"github.com/urfave/cli/v2"
 )
@@ -18,12 +20,17 @@ type CLIParams struct {
 	ADHDSet          bool
 	AutoUpdate       bool
 	NoInjectionGuard bool
+	IdleTimeout      time.Duration
 }
 
 // NewCLIParams creates CLIParams from a urfave/cli Context.
 func NewCLIParams(cCtx *cli.Context) CLIParams {
 	if cCtx == nil {
 		return DefaultCLIParams()
+	}
+	idle := cCtx.Duration("idle-timeout")
+	if idle <= 0 {
+		idle = ParseIdleTimeoutEnv()
 	}
 	return CLIParams{
 		RTK:              cCtx.Bool("rtk"),
@@ -36,6 +43,7 @@ func NewCLIParams(cCtx *cli.Context) CLIParams {
 		ADHDSet:          cCtx.IsSet("adhd"),
 		AutoUpdate:       cCtx.Bool("auto-update"),
 		NoInjectionGuard: cCtx.Bool("no-injection-guard"),
+		IdleTimeout:      idle,
 	}
 }
 
@@ -52,5 +60,20 @@ func DefaultCLIParams() CLIParams {
 		ADHDSet:          os.Getenv("ADHD_ENABLED") != "",
 		AutoUpdate:       os.Getenv("AUTO_UPDATE") == "true",
 		NoInjectionGuard: os.Getenv("INJECTION_GUARD_DISABLED") == "true",
+		IdleTimeout:      ParseIdleTimeoutEnv(),
 	}
+}
+
+// ParseIdleTimeoutEnv parses IDLE_TIMEOUT as a Go duration (e.g. "15m").
+// Empty or invalid values return 0 (disabled).
+func ParseIdleTimeoutEnv() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("IDLE_TIMEOUT"))
+	if raw == "" || raw == "0" {
+		return 0
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		return 0
+	}
+	return d
 }

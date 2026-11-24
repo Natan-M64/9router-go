@@ -130,16 +130,22 @@ func StartBackgroundRefresh(ctx context.Context, repo *db.Repo) {
 	}()
 }
 
+// RunRefreshOnce runs a single proactive OAuth refresh pass over all active
+// connections and returns how many connections were due for refresh.
+func RunRefreshOnce(ctx context.Context, repo *db.Repo) int {
+	return runBackgroundRefreshTick(ctx, repo)
+}
+
 // runBackgroundRefreshTick refreshes every due connection, sequentially with
 // inter-account delays (upstream parity: Google accounts spaced 12s + jitter).
-func runBackgroundRefreshTick(ctx context.Context, repo *db.Repo) {
+func runBackgroundRefreshTick(ctx context.Context, repo *db.Repo) int {
 	if repo == nil {
-		return
+		return 0
 	}
 	conns, err := repo.GetProviderConnections("", true)
 	if err != nil {
 		log.Printf("[BG_TOKEN_REFRESH] load active connections failed: %v", err)
-		return
+		return 0
 	}
 
 	due := SelectConnectionsNeedingRefresh(conns, time.Now())
@@ -152,11 +158,12 @@ func runBackgroundRefreshTick(ctx context.Context, repo *db.Repo) {
 			}
 			select {
 			case <-ctx.Done():
-				return
+				return len(due)
 			case <-time.After(delay):
 			}
 		}
 	}
+	return len(due)
 }
 
 // refreshBackgroundConnection refreshes one due connection and persists the
