@@ -1,87 +1,47 @@
-# Filtros do RTK — como são escolhidos e como escrever um
+# RTK filters: how they are chosen and how to write one
 
-O RTK comprime a saída de ferramentas (`bash`, MCP, leitura de página…) antes de ela ir ao modelo.
-Cada tipo de saída tem um filtro em `internal/tokensaver/filters/*.json` (embutido no binário). Um
-filtro escolhido para o texto errado **apaga conteúdo**: ele mantém só as linhas que reconhece. Por
-isso a escolha do filtro é a parte delicada, e é o assunto deste arquivo.
+RTK compresses tool output (`bash`, MCP, fetched pages, ...) before it goes to the model. Each kind of output has a filter in `internal/tokensaver/filters/*.json`, embedded in the binary. A filter chosen for the wrong text **deletes content**: it keeps only the lines it recognises. That is why choosing the filter is the delicate part, and it is what this file is about.
 
-Código: `internal/tokensaver/filters.go` (`MatchFilter`, `LoadFilters`), `rtk.go`
-(`compressTextDetailedWithCommand`), `rtk_cache.go`. Testes: `content_selection_test.go`,
-`gh_filter_selection_test.go`.
+Code: `internal/tokensaver/filters.go` (`MatchFilter`, `LoadFilters`), `rtk.go` (`compressTextDetailedWithCommand`), `rtk_cache.go`. Tests: `content_selection_test.go`, `gh_filter_selection_test.go`.
 
-## Como um filtro é escolhido
+## How a filter is chosen
 
-`MatchFilter(texto, comando, config)` segue esta ordem e para no primeiro acerto:
+`MatchFilter(text, command, config)` follows this order and stops at the first hit:
 
-1. **Saída estruturada (JSON) nunca recebe filtro de prosa.** Se o texto é um documento JSON, retorna
-   nenhum filtro: filtrar linha a linha deixaria um JSON inválido.
-2. **Por comando.** Se o comando da ferramenta foi resolvido, o primeiro filtro habilitado (ordem de
-   `priority` decrescente, depois `id`) cujo `match.commands` casa com ele é usado.
-3. **Por conteúdo.** Só quando o comando não ajuda: filtros que declaram `commands` são pulados se o
-   comando é conhecido; se o comando é vazio (resultado de MCP, página buscada, leitura via wrapper),
-   todos os filtros habilitados entram. Um filtro é escolhido se **uma** de suas `strongPatterns`
-   casa, **ou** se **pelo menos dois padrões distintos** de `match.patterns` casam.
-4. **`generic-output`** é o último recurso.
+1. **Structured output (JSON) never gets a prose filter.** If the text is a JSON document, no filter is returned: filtering line by line would leave invalid JSON behind.
+2. **By command.** If the tool's command was resolved, the first enabled filter whose `match.commands` matches it is used (ordered by `priority`, highest first, then by `id`).
+3. **By content.** Only when the command does not settle it. Filters that declare `commands` are skipped when the command is known. When the command is empty (an MCP result, a fetched page, a read through a wrapper), every enabled filter is a candidate. A filter is chosen if **one** of its `strongPatterns` matches, **or** if **at least two distinct patterns** of `match.patterns` match.
+4. **`generic-output`** is the last resort.
 
-A escolha por conteúdo é a única que pode errar sobre texto que não veio de um comando, e é a que
-exige cuidado. O RTK escolhe o filtro **antes** de remover cores ANSI, então os padrões precisam
-tolerar `\x1b[...m` e indentação quando a ferramenta imprime assim.
+Selection by content is the only path that can go wrong on text that never came from a command, and it is the one that needs care. RTK picks the filter **before** it strips ANSI colours, so patterns have to tolerate `\x1b[...m` and indentation when the tool prints them.
 
-## Regras para escrever padrões de seleção
+## Rules for writing selection patterns
 
-Elas existem porque o contrário já aconteceu: em 463 arquivos comuns lidos como saída de tool, 445
-foram capturados por algum filtro e o pipeline mantinha ~17% do texto (0,0% no `CHANGELOG.md`).
+They exist because the opposite already happened: on 463 ordinary files read as tool output, 445 were claimed by some filter and the pipeline kept about 17% of the text (0.0% for `CHANGELOG.md`).
 
-- **Caixa exata.** Os padrões de `match.patterns` e `match.strongPatterns` são compilados só com
-  `(?m)`. Uma CLI imprime `FAIL`, `ok`, `X` sempre na mesma caixa; casar sem diferenciar maiúsculas
-  deixava a prosa ("fail the test…") passar por saída de `go test`. Se precisar mesmo de caixa
-  indiferente, escreva `(?i)` no próprio padrão. As listas `includePatterns`, `dropPatterns`,
-  `collapsePatterns` e `preserve.*` continuam com `(?im)`.
-- **Um padrão solto não identifica um comando.** "failed", "INFO", "Already on", uma linha que parece
-  caminho ou um bullet `* item` aparecem em texto comum. Padrões de seleção devem descrever a
-  **forma** que o comando imprime: âncora no início da linha (`^`) e mais de uma palavra.
-- **`strongPatterns` só para assinaturas inequívocas**, de várias palavras e ancoradas, que a prosa
-  não imprime: `^diff --git \S+ \S+`, `^On branch \S+`, `^CONTAINER ID\s+IMAGE\s+COMMAND`. Não use
-  uma frase que pode abrir uma linha de texto ("On branch protection rules…" já enganou
-  `^On branch `, por isso o padrão exige o nome do branch sozinho na linha).
-- **Filtro com um único padrão** nunca é escolhido só por conteúdo (precisaria de dois acertos); ele
-  vale pelo comando, ou ganha uma `strongPattern`.
-- **Fim de linha com CRLF:** use `\r?$`, não só `$`.
-- **RE2 não tem lookahead.** `(?-i:X)` desliga a diferença de caixa só em um trecho.
+- **Exact case.** `match.patterns` and `match.strongPatterns` are compiled with `(?m)` only. A CLI prints `FAIL`, `ok` and `X` in one fixed case, and matching case-insensitively let prose ("fail the test...") pass for `go test` output. If you really need case folding, write `(?i)` in the pattern itself. The `includePatterns`, `dropPatterns`, `collapsePatterns` and `preserve.*` lists keep the shared `(?im)`.
+- **A loose pattern does not identify a command.** "failed", "INFO", "Already on", a line that looks like a path or a `* item` bullet all occur in ordinary text. Selection patterns should describe the **shape** the command prints: anchored at the start of the line, and more than one word.
+- **`strongPatterns` are for unmistakable signatures only**: multi-word, anchored lines that prose does not print, such as `^diff --git \S+ \S+`, `^On branch \S+` or `^CONTAINER ID\s+IMAGE\s+COMMAND`. Do not use a phrase that can open a line of text ("On branch protection rules..." fooled `^On branch `, which is why the pattern now requires the branch name alone on the line).
+- **A filter with a single pattern** is never chosen by content alone (it would need two hits). It works through its command, or it gets a strong pattern.
+- **CRLF line endings:** end anchors are `\r?$`, not just `$`.
+- **RE2 has no lookahead.** `(?-i:X)` turns off case folding for one part of a pattern only.
 
-## Como adicionar ou mudar um filtro
+## Adding or changing a filter
 
-1. Edite o JSON do filtro. Campos: `id`, `label`, `description`, `category`, `priority`;
-   `match` (`commands`, `patterns`, `strongPatterns`, `outputTypes`); `rules` (`stripAnsi`,
-   `matchOutput`, `includePatterns`, `dropPatterns`, `collapsePatterns`, `deduplicate`, `maxLines`,
-   `headLines`, `tailLines`, `onEmpty`); `preserve` (`errorPatterns`, `summaryPatterns`).
-2. **Teste negativo.** Acrescente em `ordinaryTexts` (`content_selection_test.go`) um trecho de
-   texto comum que contenha as palavras do seu padrão. O teste falha se o filtro o capturar.
-3. **Teste positivo.** Acrescente a saída real do comando (inclusive com CRLF, se for plausível) em
-   `TestContentSelectionStillFindsRealCommandOutput` ou em um teste próprio.
-4. Rode `go test ./internal/tokensaver/` e, se mexeu no pipeline, `make ci-local`.
-5. Faça o controle negativo: enfraqueça o padrão de propósito e confirme que o teste falha.
+1. Edit the filter's JSON. Fields: `id`, `label`, `description`, `category`, `priority`; `match` (`commands`, `patterns`, `strongPatterns`, `outputTypes`); `rules` (`stripAnsi`, `matchOutput`, `includePatterns`, `dropPatterns`, `collapsePatterns`, `deduplicate`, `maxLines`, `headLines`, `tailLines`, `onEmpty`); `preserve` (`errorPatterns`, `summaryPatterns`).
+2. **Negative test.** Add to `ordinaryTexts` (`content_selection_test.go`) a piece of ordinary text that contains the words of your pattern. The test fails if the filter claims it.
+3. **Positive test.** Add the command's real output (with CRLF too, if plausible) to `TestContentSelectionStillFindsRealCommandOutput` or to a test of its own.
+4. Run `go test ./internal/tokensaver/`, and `make ci-local` if you touched the pipeline.
+5. Run the negative control: weaken the pattern on purpose and confirm the test fails.
 
-Sobre um corpus: antes de aceitar um padrão novo, rode `MatchFilter(texto, "", DefaultRTKConfig())` em
-algumas centenas de arquivos do próprio repositório (Go, Markdown, Svelte, YAML). Qualquer filtro que
-capture um arquivo comum está solto. O estado atual é 1 arquivo em 917 (um changelog que cita stack
-traces, capturado por `error-stacktrace`).
+About a corpus: before accepting a new pattern, run `MatchFilter(text, "", DefaultRTKConfig())` over a few hundred files of this repository (Go, Markdown, Svelte, YAML). Any filter that claims an ordinary file is too loose. The current state is 1 file in 917 (a changelog that quotes stack traces, claimed by `error-stacktrace`).
 
-## Cache de resultados
+## Result cache
 
-`CompressTextDetailedWithCommand` memoiza o resultado para textos de **4 KB ou mais** (LRU de até 1024
-entradas e 64 MB de texto comprimido), com chave SHA-256 sobre `(comando, configuração, texto)`. Um
-resultado de tool que volta a cada turno custa ~0,4 ms em vez de ~114 ms para 73 KB.
+`CompressTextDetailedWithCommand` memoizes the result for texts of **4 KB or more** (an LRU of up to 1024 entries and 64 MB of compressed text), keyed by a SHA-256 over `(command, configuration, text)`. A tool result that comes back every turn costs about 0.4 ms instead of about 114 ms for 73 KB.
 
-Isso só é correto porque a compressão é uma **função pura**. Não leia relógio, aleatoriedade, arquivo
-nem variável de ambiente dentro do pipeline sem pôr o valor na chave. Todo campo novo de `RTKConfig`
-já entra na chave por ser serializado; mantenha-o exportado e sem `json:"-"`.
+This is only correct because compression is a **pure function**. Do not read a clock, a random source, a file or an environment variable inside the pipeline without putting the value in the key. Every new `RTKConfig` field already enters the key because it is serialised; keep it exported and without `json:"-"`.
 
-## Snapshots de acessibilidade (`aria_snapshot.go`)
+## Accessibility snapshots (`aria_snapshot.go`)
 
-Texto com pelo menos cinco nós com `[ref=…]` é tratado como snapshot de página. Antes do truncamento
-por linhas, o RTK remove folhas decorativas (`img`, `generic`, `presentation`, `none` **sem** nome,
-texto nem atributo além do `ref`) até nenhum wrapper ficar vazio, e reduz a indentação pela metade
-**só** se o menor degrau é exatamente 2, todas as colunas são pares e não há linha de continuação
-indentada. A segunda condição torna a operação idempotente, o que importa porque o engine builtin do
-Headroom reaplica a mesma dobra. Nós com `[cursor=pointer]`, nome, texto ou outro papel nunca saem.
+A text with at least five nodes carrying `[ref=...]` is treated as a page snapshot. Before the line-based truncation, RTK removes decorative leaves (`img`, `generic`, `presentation`, `none` with **no** name, text or attribute other than the `ref`) until no wrapper is left empty, and it halves the indentation **only** if the smallest step is exactly 2, every column is even and there is no indented continuation line. The last condition makes the operation idempotent, which matters because the built-in Headroom engine reruns the same fold. Nodes with `[cursor=pointer]`, a name, text or another role are never removed.
