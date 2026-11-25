@@ -9,6 +9,8 @@ package dashboard
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"net/http"
@@ -62,6 +64,9 @@ func fetchOpenCodeGoUsage(ctx context.Context, apiKey string) usageResult {
 	return fetchOpenCodeUsage(ctx, "OpenCode Go", openCodeGoUsageURL, apiKey)
 }
 
+// openCodeCLIUserAgent is the OpenCode CLI identity the usage reads send.
+const openCodeCLIUserAgent = "opencode/latest/2.1.4/cli"
+
 // openCodeGoUsageURL is the Go plan's usage route. A variable so tests can
 // point it at a local server.
 var openCodeGoUsageURL = "https://opencode.ai/zen/go/v1/usage"
@@ -73,10 +78,16 @@ func fetchOpenCodeUsage(ctx context.Context, plan, usageURL, apiKey string) usag
 	if apiKey == "" {
 		return usageResult{message: plan + " API key not available. Add a key to view usage."}
 	}
+	// OpenCode flags background calls that use a bare runtime User-Agent and no
+	// session, so the quota read carries the CLI identity and a session that is
+	// stable for this key (the same derivation the connection test uses).
+	sum := sha256.Sum256([]byte(apiKey))
 	headers := map[string]string{
-		"Authorization": "Bearer " + apiKey,
-		"Accept":        "application/json",
-		"User-Agent":    usageUserAgent,
+		"Authorization":      "Bearer " + apiKey,
+		"Accept":             "application/json",
+		"User-Agent":         openCodeCLIUserAgent,
+		"x-opencode-client":  "cli",
+		"x-opencode-session": "quota-" + hex.EncodeToString(sum[:])[:16],
 	}
 	status, _, out, err := usageGet(ctx, usageURL, headers)
 	if err != nil {

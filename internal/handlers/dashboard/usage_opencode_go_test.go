@@ -71,3 +71,34 @@ func TestFetchOpenCodeGoUsage_NoKeyNeverCallsOut(t *testing.T) {
 		t.Errorf("message = %q", res.message)
 	}
 }
+
+func TestFetchOpenCodeGoUsage_SendsTheCLIIdentityAndAStableSession(t *testing.T) {
+	var ua, client, session string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ua = r.Header.Get("User-Agent")
+		client = r.Header.Get("x-opencode-client")
+		session = r.Header.Get("x-opencode-session")
+		_, _ = w.Write([]byte(`{"usage":{"rolling":{"percent":1,"resetsAt":"2026-11-25T05:00:00Z"},"weekly":{"percent":1,"resetsAt":"2026-11-30T00:00:00Z"},"monthly":{"percent":1,"resetsAt":"2026-12-01T00:00:00Z"}}}`))
+	}))
+	t.Cleanup(srv.Close)
+	prev := openCodeGoUsageURL
+	openCodeGoUsageURL = srv.URL
+	t.Cleanup(func() { openCodeGoUsageURL = prev })
+
+	fetchOpenCodeGoUsage(context.Background(), "sk-go")
+	if ua != openCodeCLIUserAgent || client != "cli" {
+		t.Errorf("identity = %q / %q, want the CLI identity", ua, client)
+	}
+	if session == "" {
+		t.Fatal("no x-opencode-session header")
+	}
+	var again string
+	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		again = r.Header.Get("x-opencode-session")
+		_, _ = w.Write([]byte(`{}`))
+	})
+	fetchOpenCodeGoUsage(context.Background(), "sk-go")
+	if again != session {
+		t.Errorf("session changed between reads of one key: %q then %q", session, again)
+	}
+}
