@@ -252,6 +252,10 @@ func RegisterRoutes(r chi.Router, h *DashboardHandler) {
 		r.Post("/settings/database/prune", h.HandlePruneDatabase)
 		r.Post("/settings/database/prune-usage", h.HandlePruneUsageHistory)
 		r.Post("/settings/database/vacuum", h.HandleVacuumDatabase)
+		// Process control. Registered here and in SetupDashboardRoutes: this
+		// table is mounted by tests only, so a route added here alone 404s on
+		// the real server.
+		r.Post("/system/restart", h.HandleRestartGateway)
 		r.Post("/settings/proxy-test", h.HandleProxyTest)
 		// White-label logo upload: the file lands under DATA_DIR/uploads and
 		// appLogoUrl is rewritten to the path this gateway serves it from.
@@ -301,6 +305,14 @@ func RegisterRoutes(r chi.Router, h *DashboardHandler) {
 		// Cache Analytics & Management
 		r.Get("/resilience", h.HandleGetResilience)
 		r.Post("/resilience/reset", h.HandleResetResilience)
+
+		// Per-model circuit breaker (one provider/model pair, distinct from the
+		// provider breaker above). Static before the parameterised reset so a
+		// request to reset everything is not read as a reset of the model named
+		// "reset".
+		r.Get("/model-breakers", h.HandleGetModelBreakers)
+		r.Post("/model-breakers/reset", h.HandleResetAllModelBreakers)
+		r.Post("/model-breakers/{provider}/{model}/reset", h.HandleResetModelBreaker)
 		r.Get("/cache", h.HandleGetCache)
 		r.Delete("/cache", h.HandleDeleteCache)
 		r.Get("/cache/entries", h.HandleGetCacheEntries)

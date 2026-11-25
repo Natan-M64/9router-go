@@ -1082,6 +1082,25 @@ export interface CacheEntriesResponse {
   }
 }
 
+/** One provider/model pair's circuit breaker snapshot. */
+export interface ModelBreakerStatus {
+  /** `closed` serves normally; `cooling` sits out a cooldown; `disabled` needs a reset. */
+  state: 'closed' | 'cooling' | 'disabled'
+  provider: string
+  model: string
+  /** Consecutive model-scoped failures since the last success. */
+  failures: number
+  /** Cooldown cycles already served, which is what makes the next one longer. */
+  cooldowns: number
+  /** Milliseconds until the pair is probed again. 0 when there is no timer. */
+  retryAfterMs: number
+}
+
+/** The panel response: held-back pairs ordered first by the backend. */
+export interface ModelBreakerStatusResponse {
+  models: ModelBreakerStatus[]
+}
+
 export interface CompressionModeStats {
   count: number
   tokensSaved: number
@@ -2163,6 +2182,14 @@ export const api = {
       '/api/settings/database/vacuum',
       { method: 'POST' }
     ),
+  // The body carries the confirmation word: the gateway ignores a restart
+  // request that could not set a JSON body, so a cross-site form post cannot
+  // stop the process.
+  restartGateway: () =>
+    request<{ success: boolean; restarting: boolean }>('/api/system/restart', {
+      method: 'POST',
+      body: JSON.stringify({ confirm: 'restart' }),
+    }),
   testRtk: (data: { text: string; config?: Record<string, unknown> }) =>
     request<{
       originalTokens: number
@@ -2226,18 +2253,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ connectionId, model }),
     }),
-  getAntigravityAuthorizeUrl: (redirectUri: string) =>
+  getAntigravityAuthorizeUrl: (redirectUri: string, proxy = false) =>
     request<{ url: string; redirectUrl: string; authUrl: string; state: string; redirectUri: string }>(
-      `/api/oauth/antigravity/authorize?redirect_uri=${encodeURIComponent(redirectUri)}`,
+      `/api/oauth/antigravity/authorize?redirect_uri=${encodeURIComponent(redirectUri)}${proxy ? '&proxy=1' : ''}`,
     ),
   antigravityExchange: (code: string, redirectUri: string, state?: string) =>
     request<{ success: boolean; error?: string }>('/api/oauth/antigravity/exchange', {
       method: 'POST',
       body: JSON.stringify({ code, redirectUri, state }),
     }),
-  getAGYACPAuthorizeUrl: (redirectUri: string) =>
+  getAGYACPAuthorizeUrl: (redirectUri: string, proxy = false) =>
     request<{ url: string; redirectUrl: string; authUrl: string; state: string; redirectUri: string }>(
-      `/api/oauth/agy-acp/authorize?redirect_uri=${encodeURIComponent(redirectUri)}`,
+      `/api/oauth/agy-acp/authorize?redirect_uri=${encodeURIComponent(redirectUri)}${proxy ? '&proxy=1' : ''}`,
     ),
   agyACPExchange: (code: string, redirectUri: string, state?: string) =>
     request<{ success: boolean; error?: string }>('/api/oauth/agy-acp/exchange', {
@@ -2998,6 +3025,19 @@ export const api = {
       request<CompressionAnalyticsSummary>(
         `/api/analytics/compression?period=${encodeURIComponent(period)}`
       ),
+    // Per-model circuit breaker: one provider/model pair, distinct from the
+    // provider breaker. `retryAfterMs` is 0 for a pair that does not come
+    // back on a timer (closed, or disabled).
+    getModelBreakers: () => request<ModelBreakerStatusResponse>('/api/model-breakers'),
+    /** Lifts one pair. The only way a disabled model serves again. */
+    resetModelBreaker: (provider: string, model: string) =>
+      request<{ status: string }>(
+        `/api/model-breakers/${encodeURIComponent(provider)}/${encodeURIComponent(model)}/reset`,
+        { method: 'POST' }
+      ),
+    /** Lifts every pair, for after a provider-wide outage. */
+    resetAllModelBreakers: () =>
+      request<{ status: string }>('/api/model-breakers/reset', { method: 'POST' }),
   logout: async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' })

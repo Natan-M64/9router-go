@@ -329,6 +329,15 @@ func SetupDashboardRoutes(r chi.Router, repo *db.Repo, chatH *chat.ChatHandler) 
 	// Compression Analytics
 	r.Get("/api/analytics/compression", dashH.HandleGetCompressionAnalytics)
 
+	// Per-model circuit breaker (one provider/model pair, distinct from the
+	// provider breaker). Registered here and in dashboard.RegisterRoutes (a
+	// tests-only table); a route added there alone 404s on the real server.
+	// The bulk reset comes first: chi matches in order, so a route registered
+	// after the parameterised one is read as a model named "reset".
+	r.Get("/api/model-breakers", dashH.HandleGetModelBreakers)
+	r.Post("/api/model-breakers/reset", dashH.HandleResetAllModelBreakers)
+	r.Post("/api/model-breakers/{provider}/{model}/reset", dashH.HandleResetModelBreaker)
+
 	// Jailbreak: agent prompt presets + per-model binding. Registered here and in
 	// dashboard.RegisterRoutes (a tests-only table); a route added there alone
 	// 404s on the real server — the same trap as the per-node limits pair.
@@ -486,6 +495,9 @@ func SetupDashboardRoutes(r chi.Router, repo *db.Repo, chatH *chat.ChatHandler) 
 	r.Post("/api/settings/database/prune", dashH.HandlePruneDatabase)
 	r.Post("/api/settings/database/prune-usage", dashH.HandlePruneUsageHistory)
 	r.Post("/api/settings/database/vacuum", dashH.HandleVacuumDatabase)
+	// Process control. The mirror of dashboard.RegisterRoutes, which is mounted
+	// by tests only; a route added there alone 404s here on the real server.
+	r.Post("/api/system/restart", dashH.HandleRestartGateway)
 	r.Post("/api/settings/proxy-test", dashH.HandleProxyTest)
 	// White-label logo upload: the file lands under DATA_DIR/uploads and
 	// appLogoUrl is rewritten to the path this gateway serves it from.
