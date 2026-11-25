@@ -483,6 +483,17 @@ func (h *ChatHandler) logUsage(ctx context.Context, info *UsageLogInfo, usage *t
 	}
 	if comp := requestComposition(requestBody); comp != nil {
 		detailPayload["composition"] = comp
+		if pfp, ok := comp["prefix"].(map[string]string); ok {
+			conversation := handlerutil.GetSessionID(ctx)
+			if conversation == "" {
+				conversation = info.ConnectionID + "|" + info.Model
+			}
+			cur := prefixFingerprint{system: pfp["system"], tools: pfp["tools"]}
+			prev, hasPrev := processPrefixMemo.swap(conversation, cur)
+			if rep := cacheBreakReport(usage.PromptTokens, cachedTokens, cur, prev, hasPrev); rep != nil {
+				detailPayload["cacheBreak"] = rep
+			}
+		}
 	}
 	if stopReason != "" {
 		detailPayload["finishReason"] = stopReason
