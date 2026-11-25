@@ -48,15 +48,30 @@ var openCodeZenQuotaNames = []struct {
 }
 
 func fetchOpenCodeZenUsage(ctx context.Context, apiKey, baseURL string) usageResult {
-	const plan = "OpenCode Zen"
-	apiKey = strings.TrimSpace(apiKey)
-	if apiKey == "" {
-		return usageResult{message: "OpenCode Zen API key not available. Add a key to view usage."}
-	}
-
 	usageURL := openCodeZenUsageURL
 	if derived := openCodeZenUsageURLFor(baseURL); derived != "" {
 		usageURL = derived
+	}
+	return fetchOpenCodeUsage(ctx, "OpenCode Zen", usageURL, apiKey)
+}
+
+// fetchOpenCodeGoUsage reads the OpenCode Go plan. Its usage lives under the
+// /zen/go route (not the base URL the chat calls use), so the URL is fixed.
+// The response has the same rolling/weekly/monthly shape as Zen's.
+func fetchOpenCodeGoUsage(ctx context.Context, apiKey string) usageResult {
+	return fetchOpenCodeUsage(ctx, "OpenCode Go", openCodeGoUsageURL, apiKey)
+}
+
+// openCodeGoUsageURL is the Go plan's usage route. A variable so tests can
+// point it at a local server.
+var openCodeGoUsageURL = "https://opencode.ai/zen/go/v1/usage"
+
+// fetchOpenCodeUsage is the shared reader for both OpenCode plans: one GET with
+// the key, mapping rolling, weekly and monthly percentages onto the quota rows.
+func fetchOpenCodeUsage(ctx context.Context, plan, usageURL, apiKey string) usageResult {
+	apiKey = strings.TrimSpace(apiKey)
+	if apiKey == "" {
+		return usageResult{message: plan + " API key not available. Add a key to view usage."}
 	}
 	headers := map[string]string{
 		"Authorization": "Bearer " + apiKey,
@@ -65,25 +80,25 @@ func fetchOpenCodeZenUsage(ctx context.Context, apiKey, baseURL string) usageRes
 	}
 	status, _, out, err := usageGet(ctx, usageURL, headers)
 	if err != nil {
-		return usageResult{message: fmt.Sprintf("OpenCode Zen error: %v", err)}
+		return usageResult{message: fmt.Sprintf("%s error: %v", plan, err)}
 	}
 
 	switch status {
 	case http.StatusUnauthorized:
-		return usageResult{plan: plan, message: "OpenCode Zen authentication failed. Check the API key."}
+		return usageResult{plan: plan, message: plan + " authentication failed. Check the API key."}
 	case http.StatusForbidden:
 		if openCodeZenIsEntitlementError(out) {
-			return usageResult{plan: plan, message: "OpenCode Zen billing required for this API key."}
+			return usageResult{plan: plan, message: plan + " billing required for this API key."}
 		}
-		return usageResult{plan: plan, message: "OpenCode Zen access forbidden for this API key."}
+		return usageResult{plan: plan, message: plan + " access forbidden for this API key."}
 	}
 	if status < 200 || status >= 300 {
-		return usageResult{plan: plan, message: fmt.Sprintf("OpenCode Zen usage API error (%d).", status)}
+		return usageResult{plan: plan, message: fmt.Sprintf("%s usage API error (%d).", plan, status)}
 	}
 
 	usage, ok := usageJSON(out)["usage"].(map[string]any)
 	if !ok {
-		return usageResult{plan: plan, message: "OpenCode Zen usage response did not contain quota data."}
+		return usageResult{plan: plan, message: plan + " usage response did not contain quota data."}
 	}
 
 	quotas := map[string]any{}
@@ -107,7 +122,7 @@ func fetchOpenCodeZenUsage(ctx context.Context, apiKey, baseURL string) usageRes
 		}
 	}
 	if len(quotas) == 0 {
-		return usageResult{plan: plan, message: "OpenCode Zen usage response did not contain valid quota data."}
+		return usageResult{plan: plan, message: plan + " usage response did not contain valid quota data."}
 	}
 	return usageResult{plan: plan, quotas: quotas}
 }

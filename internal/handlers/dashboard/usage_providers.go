@@ -102,6 +102,8 @@ func fetchProviderUsage(ctx context.Context, provider string, data map[string]an
 		return fetchGeminiWebUsage(ctx, apiKey), true
 	case "opencode-zen":
 		return fetchOpenCodeZenUsage(ctx, apiKey, connectionBaseURL(data)), true
+	case "opencode-go":
+		return fetchOpenCodeGoUsage(ctx, apiKey), true
 	case "free-pi":
 		// GET {origin}/me/stats — the same endpoint the CLI's free_pi_usage
 		// tool reads. free-pi reports credits, not dollars, so the handler maps
