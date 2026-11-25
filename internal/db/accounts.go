@@ -504,3 +504,39 @@ func listModelLockJSONKeys(data string) []string {
 	}
 	return keys
 }
+
+// DisableAntigravityAccountBan switches a connection off after Google refused
+// the account for a Terms-of-Service violation. The reason is stored where the
+// provider card already reads errors (lastError) and in accountDisabledReason,
+// so it stays visible after the connection leaves the selector. message is
+// written as given; callers pass a fixed sentence, never the upstream body.
+func (r *Repo) DisableAntigravityAccountBan(connID, message string) error {
+	if connID == "" {
+		return nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	lastError, err := json.Marshal(map[string]any{
+		"status":     403,
+		"message":    message,
+		"timestamp":  now,
+		"accountBan": true,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal ban reason for %s: %w", connID, err)
+	}
+	_, err = r.db.Exec(
+		`UPDATE providerConnections
+		 SET isActive = 0,
+		     data = json_set(data,
+		       '$.status', 'error',
+		       '$.lastError', json(?),
+		       '$.accountDisabledReason', ?),
+		     updatedAt = ?
+		 WHERE id = ?`,
+		string(lastError), message, now, connID,
+	)
+	if err != nil {
+		return fmt.Errorf("disable banned connection %s: %w", connID, err)
+	}
+	return nil
+}

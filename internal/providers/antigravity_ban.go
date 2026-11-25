@@ -181,3 +181,24 @@ func RedactAppealURLs(text string) string {
 		return "[verification-url]"
 	})
 }
+
+// AntigravityAccountDisabledMessage is the reason stored on an Antigravity
+// connection that was switched off for a Terms-of-Service ban. It is a fixed
+// sentence of ours: the upstream body is never copied into the record, because
+// it can carry an appeal link with a continuation token.
+const AntigravityAccountDisabledMessage = "Desativada automaticamente: o provedor recusou a conta por violação dos Termos de Serviço (403 TOS_VIOLATION). Reative manualmente depois de verificar a situação da conta no provedor."
+
+// IsAntigravityAccountBan reports whether a failure on an Antigravity connection
+// is Google's permanent refusal of the account itself (a 403 carrying
+// TOS_VIOLATION), as opposed to a refusal scoped to one model. Other providers
+// are never matched, so a foreign "account disabled" text cannot switch off an
+// unrelated connection.
+func IsAntigravityAccountBan(provider string, status int, body []byte, errorText string) bool {
+	if provider != "antigravity" && provider != "agy" {
+		return false
+	}
+	if status != http.StatusForbidden {
+		return false
+	}
+	return IsAntigravityTOSViolation(status, body) || LooksLikeAccountDeactivated(errorText)
+}

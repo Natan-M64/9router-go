@@ -385,7 +385,21 @@ func (h *ChatHandler) handleAccountFallback(
 			// not model-scoped (e.g. 401 auth issues, or a rule that said so
 			// itself such as an NVIDIA NIM degraded cluster), so unrelated
 			// models stay available.
-			if classification.ModelScoped || isModelScopedError(ue.StatusCode, errorText, model, ue.Body) {
+			if providers.IsAntigravityAccountBan(provider, ue.StatusCode, ue.Body, errorText) {
+				// Google refused the account itself, for every model. Switch it off
+				// so the selector stops choosing it, and keep the reason on the record.
+				// The escalating ban lock is also recorded, so a reactivation made by
+				// hand still waits out the lock instead of hitting Google at once.
+				if err := h.Repo.DisableAntigravityAccountBan(connObj.ID, providers.AntigravityAccountDisabledMessage); err != nil {
+					log.Warn("fallback", "disable banned antigravity account failed", "conn", connObj.ID, "error", err)
+				} else {
+					log.Warn("fallback", "antigravity account disabled after provider ToS ban", "conn", connObj.ID)
+				}
+				if _, _, lockErr := h.Repo.RecordConnectionAccountBanFailure(connObj.ID); lockErr != nil {
+					log.Warn("fallback", "account ban lock failed", "conn", connObj.ID, "error", lockErr)
+				}
+				h.getSessionAffinity().EvictConnection(connObj.ID)
+			} else if classification.ModelScoped || isModelScopedError(ue.StatusCode, errorText, model, ue.Body) {
 				if recErr := h.Repo.RecordConnectionScopedError(connObj.ID, model, "chat", ue.StatusCode, errorText, classification.NewBackoffLevel); recErr != nil {
 					log.Warn("fallback", "record connection error failed", "conn", connObj.ID, "error", recErr)
 				}
