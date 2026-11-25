@@ -141,7 +141,6 @@ var freeModelCatalog = []freeBudget{
 
 	// NVIDIA NIM (developer-program free access).
 	{"nvidia", "google/gemma-4-31b-it", regimeRecurringCredit, ""},
-	{"nvidia", "nvidia/nemotron-3-super-120b-a12b", regimeRecurringCredit, ""},
 	{"nvidia", "openai/gpt-oss-120b", regimeRecurringCredit, ""},
 
 	// Ollama Cloud free tier.
