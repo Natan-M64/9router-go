@@ -99,6 +99,9 @@ func TestLogUsageStoresCacheBreakForTheConversation(t *testing.T) {
 
 	// 30k prompt with 5k cached: a 17% hit, far below the floor.
 	h.LogUsage(ctx, info, &translator.OpenAIUsage{PromptTokens: 30000, CompletionTokens: 5, CachedTokens: 5000}, 50, first, nil)
+	// The record id is unix milliseconds plus the model, so two calls in the
+	// same millisecond would share an id and the insert would keep only one.
+	time.Sleep(2 * time.Millisecond)
 	h.LogUsage(ctx, info, &translator.OpenAIUsage{PromptTokens: 30000, CompletionTokens: 5, CachedTokens: 5000}, 50, second, nil)
 
 	rows, err := database.Query(`SELECT data FROM requestDetails WHERE connectionId = 'conn-break' ORDER BY rowid`)

@@ -47,11 +47,14 @@ func newAntigravityFake(t *testing.T) *antigravityFake {
 		if si == nil {
 			si, _ = inner["system_instruction"].(map[string]any)
 		}
+		// The official Antigravity identity is re-added to every request, moved or
+		// not, as a fixed 427-byte prefix. Only the user's own instruction is what
+		// the backend refuses, so only that is counted.
 		siLen := 0
 		if parts, ok := si["parts"].([]any); ok {
 			for _, p := range parts {
 				if pm, ok := p.(map[string]any); ok {
-					if txt, ok := pm["text"].(string); ok {
+					if txt, ok := pm["text"].(string); ok && !strings.Contains(txt, "You are Antigravity") {
 						siLen += len(txt)
 					}
 				}
