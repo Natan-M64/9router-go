@@ -1,7 +1,7 @@
 # Status
 
 Updated 2026-11-24 · Fork `Natan-M64/9router-go` (upstream `luqman-v1/9router-go` / `decolua/9router`)
-Current milestone: **Fork in sync with upstream (0 commits behind) and stable**: RTK and prompt cache, DeepSeek and the compaction signal are fixed. Next: the NVIDIA catalog, then Block 2 (together with the `x-9router-connection` header).
+Current milestone: **Fork in sync with upstream (0 commits behind) and stable**: NVIDIA catalog pruned (`fbf5b96e`) and the cache-break indicator (`ea928a96`) live since 22:55. Next: Block 2 (together with the `x-9router-connection` header).
 Last proof: [journal/2026-11.md](journal/2026-11.md).
 Optimization plan: [optimization-roadmap.md](optimization-roadmap.md) · RTK filters: [RTK_FILTERS.md](RTK_FILTERS.md).
 Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
@@ -10,7 +10,7 @@ Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 
 | ID | Expected result | State |
 |---|---|---|
-| O1 | **NVIDIA catalog with extinct models**: `google/gemma-3-4b-it` returns 404, `meta/llama-3.1-8b-instruct` returns 410 "Gone" (end of life at NVIDIA) and `google/gemma-4-31b-it` timed out at 90 s; the gateway lists all three | Found; the live NVIDIA list still has to be probed and the catalog pruned. |
+| O1 | **NVIDIA catalog**: extinct (410) and non-chat entries removed (`fbf5b96e`); no NVIDIA traffic since the restart yet | Done in code; confirm on the next NVIDIA request. |
 | O2 | **MVP proof, remainder**: Claude, Codex, OpenRouter, Venice, DeepSeek and opencode-go answered 200 (plain and stream); gemini, groq and kilocode (status `unavailable` on the instance) and the CI `integration` job are still to be checked | Partial. |
 
 ## Next (in order)
@@ -48,6 +48,7 @@ Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 
 ## Verified (2026-11-24)
 
+- **Live after restart**: 5/5 new DeepSeek records carry `composition` and `finishReason`; no `cacheBreak`, correct since all hit ≥94% cache.
 - `make ci-local` exit 0 (77 packages) and `actionlint` exit 0; CI green on `e9034a51` (14m23s). Pushes that change only Markdown run no pipeline.
 - Upstream synced (4 commits, 4 conflicting files resolved); `ds/deepseek-v4.1-flash` went from 400 to 200 on the real API (served as `deepseek-flash`, confirmed by the official documentation), and `ocg/deepseek-v4.1-flash` is unchanged.
 - Real chat and stream through the user's instance: opencode-go, DeepSeek, Claude (haiku), Codex (astra), OpenRouter (`:free`, with `max_tokens` 256) and Venice.
