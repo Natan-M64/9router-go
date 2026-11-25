@@ -481,6 +481,9 @@ func (h *ChatHandler) logUsage(ctx context.Context, info *UsageLogInfo, usage *t
 		"request":        map[string]any{"messages": reqMsgs},
 		"response":       map[string]any{"content": respContent},
 	}
+	if comp := requestComposition(requestBody); comp != nil {
+		detailPayload["composition"] = comp
+	}
 	if stopReason != "" {
 		detailPayload["finishReason"] = stopReason
 	}
