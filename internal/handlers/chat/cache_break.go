@@ -21,7 +21,11 @@ const (
 type prefixFingerprint struct {
 	system string
 	tools  string
-	at     time.Time
+	// messages is the ordered chain of per-message hashes (compositionMessageCap
+	// at most). It is what lets the report name the first message that moved
+	// instead of only saying "history-rewritten".
+	messages string
+	at       time.Time
 }
 
 // prefixMemo remembers the last fingerprint per conversation so a request can
@@ -90,6 +94,37 @@ func cacheBreakReport(prompt, cached int, cur prefixFingerprint, prev prefixFing
 		report["cause"] = "tools-changed"
 	default:
 		report["cause"] = "history-rewritten"
+		if idx, ok := firstMovedMessage(prev.messages, cur.messages); ok {
+			report["firstMovedIndex"] = idx
+		} else if prev.messages != "" && cur.messages != "" {
+			// Every retained message hash matches. The gateway forwarded the
+			// same fixed prefix, so the cut is past the retained window or the
+			// provider dropped the entry (TTL/eviction) — not a rewrite.
+			report["cause"] = "prefix-unchanged"
+		}
 	}
 	return report
+}
+
+// messageHashLen is the length of each entry in prefixFingerprint.messages, as
+// written by messageHash in detail_composition.go.
+const messageHashLen = 8
+
+// firstMovedMessage returns the zero-based index of the first message whose
+// hash differs between the previous request and this one. Index 0 means the
+// conversation's front moved (a prune, or a rewritten first turn); a larger
+// index is a mid-history rewrite. ok is false when the two chains share every
+// entry the shorter of them covers, which means the cut is in the messages past
+// compositionMessageCap or in the provider's own cache.
+func firstMovedMessage(prev, cur string) (int, bool) {
+	n := len(prev)
+	if len(cur) < n {
+		n = len(cur)
+	}
+	for i := 0; i+messageHashLen <= n; i += messageHashLen {
+		if prev[i:i+messageHashLen] != cur[i:i+messageHashLen] {
+			return i / messageHashLen, true
+		}
+	}
+	return 0, false
 }

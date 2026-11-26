@@ -1309,7 +1309,7 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 	} else if providerCfg.IsGeminiNative() {
 		fwdErr = h.forwardGeminiNativeRequest(ctx, w, provider, providerCfg, apiKey, connectionID, pipedBody, isStream, translateResponse, metrics, httpClient, start)
 	} else {
-		fwdErr = h.forwardRequest(ctx, w, providerCfg, apiKey, pipedBody, isStream, translateResponse, metrics, httpClient, provider, upstreamClaude, claudeNative)
+		fwdErr = h.forwardRequest(ctx, w, providerCfg, apiKey, pipedBody, isStream, translateResponse, metrics, httpClient, provider, connectionID, upstreamClaude, claudeNative)
 	}
 
 	// A tap that cut the stream must win over whatever the dispatch returned:
@@ -1382,7 +1382,7 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 			} else if providerCfg.IsGeminiNative() {
 				fwdErr = h.forwardGeminiNativeRequest(ctx, w, provider, providerCfg, apiKey, connectionID, pipedBody, isStream, translateResponse, metrics, httpClient, start)
 			} else {
-				fwdErr = h.forwardRequest(ctx, w, providerCfg, apiKey, pipedBody, isStream, translateResponse, metrics, httpClient, provider, upstreamClaude, claudeNative)
+				fwdErr = h.forwardRequest(ctx, w, providerCfg, apiKey, pipedBody, isStream, translateResponse, metrics, httpClient, provider, connectionID, upstreamClaude, claudeNative)
 			}
 		}
 	}

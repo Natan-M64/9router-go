@@ -270,6 +270,25 @@
     })
   }
 
+  // Seeds rows from the persisted snapshot before the first read lands. The
+  // view unmounts on every tab switch, so without this a revisit rendered a
+  // spinner over data the browser already had — the tracker's own cache was
+  // written and never read. A row is only seeded when it has nothing fresher,
+  // and the read that follows immediately replaces it.
+  function hydrateQuotaCache(visible: ProviderConnection[]): void {
+    const cached = getQuotaCache()
+    if (!cached) return
+    const next = { ...quotaData }
+    let seeded = false
+    for (const conn of visible) {
+      if (next[conn.id]) continue
+      const entry = cached[conn.id]
+      if (!entry || !Array.isArray(entry.quotas)) continue
+      next[conn.id] = entry
+      seeded = true
+    }
+    if (seeded) quotaData = next
+  }
   const KIRO_METHOD_LABELS: Record<string, string> = {
     'builder-id': 'AWS Builder ID',
     idc: 'IAM Identity Center',
@@ -768,6 +787,7 @@
 
     try {
       const visibleConnections = await fetchConnections(page)
+      hydrateQuotaCache(visibleConnections)
       await fetchQuotasFor(visibleConnections.filter(shouldFetch), visibleConnections, force)
     } catch (error) {
       console.error('Error refreshing all providers:', error)
@@ -1067,6 +1087,7 @@
       const visibleConnections = await fetchConnections(page)
       connectionsLoading = false
       initialLoadDone = true
+      hydrateQuotaCache(visibleConnections)
       await fetchQuotasFor(visibleConnections, visibleConnections)
       void loadMiniMaxCheckins()
     })()
@@ -1616,7 +1637,7 @@
 
           <!-- Card body: quota rows -->
           <div class="px-2 py-1.5">
-            {#if isLoading}
+            {#if isLoading && !quota}
               <div class="py-5 text-center text-text-muted">
                 <span class="material-symbols-outlined text-[28px] animate-spin">
                   progress_activity

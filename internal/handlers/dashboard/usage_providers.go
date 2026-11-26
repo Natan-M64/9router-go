@@ -68,9 +68,14 @@ func (r usageResult) toResponse() map[string]any {
 // fetchProviderUsage dispatches a live quota fetch for providers with a
 // ported usage handler. Returns ok=false for unhandled providers (caller
 // falls back to locks/antigravity paths).
-func fetchProviderUsage(ctx context.Context, provider string, data map[string]any) (usageResult, bool) {
+func fetchProviderUsage(ctx context.Context, provider string, data map[string]any, connectionID string) (usageResult, bool) {
 	accessToken, apiKey, psd := usageCreds(data)
 	switch provider {
+	case "venice":
+		// Venice's billing API is ADMIN-only; without one the balance comes
+		// from the headers of the last inference response.
+		adminKey, _ := data["adminApiKey"].(string)
+		return fetchVeniceUsage(ctx, apiKey, firstNonEmptyStr(psdStr(psd, "adminApiKey"), adminKey), connectionID), true
 	case "cloudflare-ai":
 		// Workers AI has no quota API: read today's neurons from GraphQL Analytics.
 		return fetchCloudflareAiUsage(ctx, apiKey, psd), true

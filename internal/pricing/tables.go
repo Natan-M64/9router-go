@@ -432,6 +432,18 @@ var (
 			"pixtral-12b-2409":          {InputPer1M: 0.15, OutputPer1M: 0.15},
 			"pixtral-large-latest":      {InputPer1M: 2.0, OutputPer1M: 6.0},
 		},
+		// Venice prices its DeepSeek-shaped model ids far above the `deepseek-v*`
+		// pattern, so without this block the gateway records ~40% of the
+		// invoice. Rates are amount/units from a Venice billing export
+		// (2026-11-09 .. 2026-11-26): $0.33 in, $1.32 out, $0.00825 cache read.
+		// No cache-write or reasoning rate is published, so both stay zero and
+		// CalculateCost falls back. venice-uncensored-1-2 showed no cache-input
+		// line in the export, so its cached rate stays unset instead of guessed.
+		"venice": {
+			"deepseek-v4-1-flash-1017-uncensored": {InputPer1M: 0.33, OutputPer1M: 1.32, CachedPer1M: 0.00825},
+			"deepseek-v4-1-flash-uncensored":      {InputPer1M: 0.33, OutputPer1M: 1.32, CachedPer1M: 0.00825},
+			"venice-uncensored-1-2":               {InputPer1M: 0.2, OutputPer1M: 0.9},
+		},
 	}
 )
 

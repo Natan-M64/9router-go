@@ -450,6 +450,34 @@ export function getHiddenQuotaRows(
   return quotas.filter((quota) => hidden.has(getQuotaVisibilityKey(quota)))
 }
 
+// Generic quota rows: the field map every fetcher that does not need its own
+// branch goes through. Kept in one place so a provider that only cares about
+// row *order* (Venice) reuses it instead of copying the mapping.
+function genericQuotaRows(quotas: Record<string, Record<string, unknown>>): NormalizedQuota[] {
+  return Object.entries(quotas).map(([name, quota]) => {
+    const row: NormalizedQuota = {
+      name: (quota.name as string) || name,
+      used: Number(quota.used) || 0,
+      total: Number(quota.total) || 0,
+      resetAt: (quota.resetAt as string) || null,
+    }
+    if (quota.remaining !== undefined) row.remaining = Number(quota.remaining)
+    if (quota.remainingPercentage !== undefined) {
+      row.remainingPercentage = Number(quota.remainingPercentage)
+    }
+    if (quota.percentage !== undefined) row.percentage = Number(quota.percentage)
+    if (quota.colorPercentage !== undefined) row.colorPercentage = Number(quota.colorPercentage)
+    if (quota.percentageIsUsed !== undefined) row.percentageIsUsed = quota.percentageIsUsed === true
+    if (quota.emptyMessage !== undefined) row.emptyMessage = (quota.emptyMessage as string) || null
+    if (quota.unlimited !== undefined) row.unlimited = Boolean(quota.unlimited)
+    if (quota.recurring !== undefined) row.recurring = quota.recurring !== false
+    if (quota.isCreditBalance !== undefined) row.isCreditBalance = Boolean(quota.isCreditBalance)
+    if (quota.currency !== undefined) row.currency = String(quota.currency)
+    if (quota.displayName !== undefined) row.displayName = String(quota.displayName)
+    if (quota.quotaType !== undefined) row.quotaType = String(quota.quotaType)
+    return row
+  })
+}
 // ─── Provider-specific quota parsing (parity with upstream Next.js utils.js) ───
 export function parseQuotaData(provider: string, data: unknown): NormalizedQuota[] {
   if (!data || typeof data !== 'object') return []
@@ -960,6 +988,23 @@ export function parseQuotaData(provider: string, data: unknown): NormalizedQuota
         }
         break
 
+      case 'venice': {
+        // A fixed order: the gateway builds the rows from a Go map, whose
+        // iteration order changes between refreshes, and a table whose rows
+        // move reads as a bug. DIEM first, then the USD-denominated credits.
+        if (d.quotas) {
+          const VENICE_ORDER = ['diem', 'usd', 'bundled', 'earned']
+          const ordered = Object.fromEntries(
+            Object.entries(d.quotas).sort(([a], [b]) => {
+              const ia = VENICE_ORDER.indexOf(a)
+              const ib = VENICE_ORDER.indexOf(b)
+              return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
+            }),
+          )
+          normalizedQuotas.push(...genericQuotaRows(ordered))
+        }
+        break
+      }
       default:
         if (d.message && !d.quotas) {
           normalizedQuotas.push({
@@ -970,31 +1015,7 @@ export function parseQuotaData(provider: string, data: unknown): NormalizedQuota
             message: d.message,
           })
         } else if (d.quotas) {
-          Object.entries(d.quotas).forEach(([name, quota]) => {
-            const used = Number(quota.used) || 0
-            const total = Number(quota.total) || 0
-            const row: NormalizedQuota = {
-              name: (quota.name as string) || name,
-              used,
-              total,
-              resetAt: (quota.resetAt as string) || null,
-            }
-            if (quota.remaining !== undefined) row.remaining = Number(quota.remaining)
-            if (quota.remainingPercentage !== undefined) {
-              row.remainingPercentage = Number(quota.remainingPercentage)
-            }
-            if (quota.percentage !== undefined) row.percentage = Number(quota.percentage)
-            if (quota.colorPercentage !== undefined) row.colorPercentage = Number(quota.colorPercentage)
-            if (quota.percentageIsUsed !== undefined) row.percentageIsUsed = quota.percentageIsUsed === true
-            if (quota.emptyMessage !== undefined) row.emptyMessage = (quota.emptyMessage as string) || null
-            if (quota.unlimited !== undefined) row.unlimited = Boolean(quota.unlimited)
-            if (quota.recurring !== undefined) row.recurring = quota.recurring !== false
-            if (quota.isCreditBalance !== undefined) row.isCreditBalance = Boolean(quota.isCreditBalance)
-            if (quota.currency !== undefined) row.currency = String(quota.currency)
-            if (quota.displayName !== undefined) row.displayName = String(quota.displayName)
-            if (quota.quotaType !== undefined) row.quotaType = String(quota.quotaType)
-            normalizedQuotas.push(row)
-          })
+          normalizedQuotas.push(...genericQuotaRows(d.quotas))
         }
     }
   } catch (error) {

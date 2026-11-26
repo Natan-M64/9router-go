@@ -488,10 +488,29 @@ func (h *ChatHandler) logUsage(ctx context.Context, info *UsageLogInfo, usage *t
 			if conversation == "" {
 				conversation = info.ConnectionID + "|" + info.Model
 			}
-			cur := prefixFingerprint{system: pfp["system"], tools: pfp["tools"]}
+			cur := prefixFingerprint{system: pfp["system"], tools: pfp["tools"], messages: pfp["messages"]}
 			prev, hasPrev := processPrefixMemo.swap(conversation, cur)
 			if rep := cacheBreakReport(usage.PromptTokens, cachedTokens, cur, prev, hasPrev); rep != nil {
+				// The tokens the miss re-billed at the full input rate are the
+				// tax this break cost; the cache rate the rest paid is already
+				// in cost. Priced here so the record and the log line carry the
+				// amount instead of a token count the operator has to convert.
+				if uncached := usage.PromptTokens - cachedTokens; uncached > 0 {
+					rep["reBilledTokens"] = uncached
+					rep["reBilledUsd"] = pricing.EstimateCost(info.Provider, info.Model, pricing.TokenCounts{PromptTokens: uncached})
+				}
 				detailPayload["cacheBreak"] = rep
+				log.Warn(
+					"usage", "prompt cache break",
+					"provider", info.Provider,
+					"model", info.Model,
+					"cause", rep["cause"],
+					"firstMovedIndex", rep["firstMovedIndex"],
+					"reBilledTokens", rep["reBilledTokens"],
+					"reBilledUsd", rep["reBilledUsd"],
+					"prompt", usage.PromptTokens,
+					"cached", cachedTokens,
+				)
 			}
 		}
 	}

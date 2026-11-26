@@ -107,6 +107,16 @@ func (h *DashboardHandler) HandleGetConnectionUsage(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// A reopen of the tracker re-reads every row. Answer it from the short-lived
+	// cache before the fetch gate, so the revisit is instant and costs no
+	// upstream call; a manual refresh (force=1) still reads the provider.
+	cacheKey := usageCacheKey(conn)
+	if !usageForceRequested(r.URL.Query().Get("force")) {
+		if cached, hit := usageReadCache.get(conn.ID, cacheKey); hit {
+			handlerutil.WriteJSON(w, http.StatusOK, cached)
+			return
+		}
+	}
 	var data map[string]any
 	if conn.Data != "" {
 		_ = json.Unmarshal([]byte(conn.Data), &data)
@@ -130,7 +140,7 @@ func (h *DashboardHandler) HandleGetConnectionUsage(w http.ResponseWriter, r *ht
 		}
 	}
 
-	res, ok := fetchProviderUsage(r.Context(), conn.Provider, data)
+	res, ok := fetchProviderUsage(r.Context(), conn.Provider, data, connID)
 	// Upstream force-refreshes and retries exactly once here
 	// (src/app/api/usage/[connectionId]/route.js): a stored access token can age
 	// out while the refresh token is still good. That retry is only worth a call
@@ -142,15 +152,15 @@ func (h *DashboardHandler) HandleGetConnectionUsage(w http.ResponseWriter, r *ht
 		if retry.err != nil {
 			log.Warn("usage", "forced credential refresh failed", "provider", conn.Provider, "conn", connID, "error", retry.err)
 		} else if retry.refreshed {
-			if retried, retryOK := fetchProviderUsage(r.Context(), conn.Provider, data); retryOK {
-				handlerutil.WriteJSON(w, http.StatusOK, retried.toResponse())
+			if retried, retryOK := fetchProviderUsage(r.Context(), conn.Provider, data, connID); retryOK {
+				writeUsagePayload(w, conn, cacheKey, retried.toResponse())
 				return
 			}
 		}
 	}
 	if ok {
 		h.syncCodexPlanFromUsage(conn, data, res.plan)
-		handlerutil.WriteJSON(w, http.StatusOK, res.toResponse())
+		writeUsagePayload(w, conn, cacheKey, res.toResponse())
 		return
 	}
 
@@ -172,7 +182,7 @@ func (h *DashboardHandler) HandleGetConnectionUsage(w http.ResponseWriter, r *ht
 			defer cancel()
 
 			res := fetchAntigravityDashboardUsage(ctx, accessToken, projectID)
-			handlerutil.WriteJSON(w, http.StatusOK, res.toResponse())
+			writeUsagePayload(w, conn, cacheKey, res.toResponse())
 			return
 		}
 	}
@@ -201,7 +211,7 @@ func (h *DashboardHandler) HandleGetConnectionUsage(w http.ResponseWriter, r *ht
 		}
 	}
 
-	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
+	writeUsagePayload(w, conn, cacheKey, map[string]any{
 		"plan":   conn.Provider,
 		"quotas": respQuotas,
 	})

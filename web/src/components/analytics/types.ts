@@ -22,6 +22,8 @@ export interface UsageItem {
   completionTokens?: number
   cachedTokens?: number
   cost?: number
+  /** metered | included | unknown — how the provider's usage is paid for. */
+  billing?: string
   lastUsed?: string
   rawModel?: string
   accountName?: string
@@ -142,6 +144,12 @@ export interface StatsData {
   totalCompletionTokens?: number
   totalCachedTokens?: number
   totalCost?: number
+  /** Share of totalCost billed per token (money actually charged). */
+  totalCostMetered?: number
+  /** Share of totalCost on a subscription, plan quota or free tier. */
+  totalCostIncluded?: number
+  /** Share of totalCost on providers this build cannot classify. */
+  totalCostUnclassified?: number
   byProvider?: Record<string, UsageItem>
   byModel?: Record<string, UsageItem>
   byAccount?: Record<string, UsageItem>
