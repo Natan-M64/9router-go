@@ -1,7 +1,7 @@
 # Status
 
 Updated 2026-11-26 · Fork `Natan-M64/9router-go` (upstream `luqman-v1/9router-go` / `decolua/9router`)
-Current milestone: **Billing cost basis and Venice quota verified, still uncommitted on `main`**; local `main` is 7 commits behind `fork/main` (`ccd37917` guardrail policies, `1706621d` session revocation on password change, `49b9f097` jailbreak per-key delete, wiki/images). Next: commit the tree, then merge `fork/main`.
+Current milestone: **Billing cost basis and Venice quota submitted in PR #2** (`feat/billing-venice`); local `main` remains 7 commits behind `fork/main` (`ccd37917` guardrail policies, `1706621d` session revocation on password change, `49b9f097` jailbreak per-key delete, wiki/images). Next: address review feedback and await CI/review.
 Last proof: [journal/2026-11.md](journal/2026-11.md).
 Optimization plan: [optimization-roadmap.md](optimization-roadmap.md) · RTK filters: [RTK_FILTERS.md](RTK_FILTERS.md).
 Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
@@ -10,7 +10,7 @@ Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 
 | ID | Expected result | State |
 |---|---|---|
-| N1 | **Billing and quota**: Venice prices checked against the operator's invoice; metered spend kept apart from list-price cost (`opencode-go`, `ollama`, `xiaomi-mimo` misclassified before); Venice balance from inference headers with an optional ADMIN probe; 70 s usage cache with frontend hydration; cache-break diagnosis with divergent index and cost | Implemented and locally validated; still uncommitted. 7 days after restart: metered `$0.2217`, list-price `$30.6896`, unclassified `$0`. |
+| N1 | **Billing and quota**: Venice prices checked against the operator's invoice; metered spend kept apart from list-price cost (`opencode-go`, `ollama`, `xiaomi-mimo` misclassified before); Venice balance from inference headers with an optional ADMIN probe; 70 s usage cache with frontend hydration; cache-break diagnosis with divergent index and cost | Submitted in PR #2 (`a907da3e`); review fixes pushed. 7 days after restart: metered `$0.2217`, list-price `$30.6896`, unclassified `$0`. |
 | O2 | **MVP proof, remainder**: Claude, Codex, OpenRouter, Venice, DeepSeek and opencode-go answered 200 (plain and stream); gemini, groq and kilocode (status `unavailable` on the instance) and the CI `integration` job are still to be checked | Partial. |
 
 ## Next (in order)
