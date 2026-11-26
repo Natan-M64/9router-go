@@ -122,9 +122,9 @@ func usageForceRequested(raw string) bool {
 	return raw == "1" || raw == "true"
 }
 
-// writeUsagePayload stores a successful read and writes it to the client. Only
-// successful payloads reach this helper, so a transient failure is never
-// cached for the next reopen.
+// writeUsagePayload caches payloads without a message and writes every result
+// to the client. Provider messages can represent transient fetch failures, so
+// leave those uncached to allow the next reopen to retry.
 func writeUsagePayload(w http.ResponseWriter, conn *models.ProviderConnection, cacheKey string, payload map[string]any) {
 	if _, hasMessage := payload["message"]; !hasMessage {
 		usageReadCache.put(conn.ID, cacheKey, payload)
