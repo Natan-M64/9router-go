@@ -1,7 +1,7 @@
 # Status
 
 Updated 2026-11-26 · Fork `Natan-M64/9router-go` (upstream `luqman-v1/9router-go` / `decolua/9router`)
-Current milestone: **upstream sync merged locally** — `origin/main` (`67a4bc94`, v1.9.17, 44 commits) merged into `sync/upstream-20`, five conflicts resolved, local gates green; PR to `fork/main` pending. Next: open the PR, re-diagnose the `ocg` packed-SSE error (R13 recurred), finish the MVP proofs.
+Current milestone: **upstream sync in PR #4** (`Natan-M64/9router-go`, branch `sync/upstream-20`) — `origin/main` (`67a4bc94`, v1.9.17, 44 commits) merged, 5 conflicts resolved, gates green. Next: PR CI, then the operator restarts the gateway to deploy the rebuilt binary (R13).
 Last proof: [journal/2026-11.md](journal/2026-11.md).
 Optimization plan: [optimization-roadmap.md](optimization-roadmap.md) · RTK filters: [RTK_FILTERS.md](RTK_FILTERS.md).
 Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
@@ -38,7 +38,7 @@ Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 | R5 | RTK + built-in Headroom double pass measured at no cost (209.8 ms with and without), so roadmap 1.2a does not hold | REFUTED in the roadmap. |
 | R11 | A reply hit `finish_reason: length` at 1133 tokens (limit 65536) on `main-fast` → `antigravity/gemini-4-hydrogen-low`. The gateway relays Gemini's `MAX_TOKENS` unchanged; the sent `maxOutputTokens` and `thoughtsTokenCount` are not recorded | Records now carry `finishReason` and the client's `maxTokens`; check both on the next `length`. |
 | R12 | This session runs **through** the local gateway, so stopping or restarting that process cuts the session and the operator has to start it again by hand. The running binary predates the current source tree | Never stop/kill the gateway from tooling; rebuild and let the operator restart. |
-| R13 | Kilo `JSON parsing failed` on `ocg/deepseek-v4.1-flash-free`: the provider packs the tool-call chunk and the `finish_reason:"tool_calls"` terminal chunk with a single `\n`, so a strict client reads one event with two JSON payloads. `SSECopy.writeEvents` splits consecutive `data:` lines with a blank separator (`internal/proxy/sse_copy.go`, `sse_packed_data_events_test.go`), red before the fix and green after | **Recurred 2026-11-26**: same shape, second object is the terminal `tool_calls` chunk. Next: capture it live and check whether the `ocg` dispatch path or a read-boundary split bypasses the separator. |
+| R13 | Kilo `JSON parsing failed` on `ocg/deepseek-v4.1-flash-free`: the provider packs the tool-call and terminal `tool_calls` chunks with a single `\n`, so a strict client reads one event with two payloads. `SSECopy.writeEvents` splits consecutive `data:` lines with a blank separator (`internal/proxy/sse_copy.go`, `sse_packed_data_events_test.go`), pinned red→green including byte-at-a-time reads | **Recurrence explained 2026-11-26**: `go version -m` shows the process on `:20130` (PID 88437) runs revision `ccb977dc`, built 11:41, before the fix commits (12:10, 12:27) — the fix was never deployed. Binary rebuilt to `ad42a401` at 14:34; the operator must restart the gateway, since this session runs through it. |
 | R2 | The GHCR package `ghcr.io/natan-m64/9router-go` may be private by default on GitHub Packages | The user switches visibility to Public if `docker pull` without login is wanted. |
 
 ## Done in the last 7 days
@@ -50,7 +50,7 @@ Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 
 ## Verified (2026-11-26)
 
-- `sync/upstream-20`, after merging `origin/main` (`67a4bc94`): `go build ./...` and `go vet ./...` exit 0; `go test -count=1 ./...` exit 0 (80 packages `ok`, 5 without tests, no `FAIL`); `make test-integration` exit 0; `bun test src scripts` 1091 pass / 0 fail; `bun run ratchet:svelte` 0 unresolved identifiers, 0 errors; `bunx oxlint --deny-warnings` exit 0.
+- `sync/upstream-20`, after merging `origin/main` (`67a4bc94`): `go build ./...` and `go vet ./...` exit 0; `go test -count=1 ./...` exit 0 (80 packages `ok`, no `FAIL`); `make test-integration` exit 0; `bun test` 1091 pass; `ratchet:svelte` 0 errors; `oxlint --deny-warnings` exit 0.
 - Not re-run after the merge: `make cross`, `go test -race`, the e2e dashboard suites, the PostgreSQL smoke; no independent review of the merge.
 
 
