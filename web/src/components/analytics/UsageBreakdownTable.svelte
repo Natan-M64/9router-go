@@ -61,6 +61,16 @@
     totalTokens: number
   }
 
+  // Billing label for a provider row. The server classifies each provider as
+  // metered (per-token invoice), included (subscription, plan quota or free
+  // tier) or unknown, so a row whose cost is list price can be told apart from
+  // a row that was actually charged.
+  function billingTag(billing?: string): { text: string; tone: 'warning' | 'info' | 'neutral' } | null {
+    if (billing === 'metered') return { text: 'Metered', tone: 'warning' }
+    if (billing === 'included') return { text: 'Included', tone: 'info' }
+    if (billing === 'unknown') return { text: 'Unclassified', tone: 'neutral' }
+    return null
+  }
   function rowLabel(tableView: TableView, key: string, item: UsageItem): string {
     switch (tableView) {
       case 'account':
@@ -267,6 +277,7 @@
           </thead>
           <tbody class="divide-y divide-border/60">
             {#each tableData() as row}
+              {@const tag = tableView === 'provider' ? billingTag(row.billing) : null}
               <tr class="hover:bg-surface-2/60 transition-colors">
                 <td class="py-3 px-4 font-mono font-medium text-text-main text-xs">
                   <div class="flex items-center gap-2">
@@ -278,6 +289,9 @@
                       />
                     {/if}
                     <span class="truncate">{row.label}</span>
+                    {#if tag}
+                      <Badge variant={tag.tone} size="sm">{tag.text}</Badge>
+                    {/if}
                   </div>
                 </td>
                 {#if tableView !== 'provider'}

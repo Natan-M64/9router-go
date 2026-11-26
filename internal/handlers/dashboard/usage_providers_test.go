@@ -123,6 +123,9 @@ func TestIsUsageEligibleConnection(t *testing.T) {
 		{"kimi", "oauth", true},
 		{"openai", "apikey", false},
 		{"deepseek", "apikey", true},
+		// Venice reads its credit balance from the billing API (ADMIN key) or
+		// from the x-venice-balance-* headers of an inference response.
+		{"venice", "apikey", true},
 		{"comfyui", "apikey", false},
 		{"minimax-code", "mcode-lease", true},
 		{"minimax-code-global", "mcode-lease", true},

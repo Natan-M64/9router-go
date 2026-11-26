@@ -156,7 +156,7 @@ func TestFetchProviderUsage_CommandCodeGoat(t *testing.T) {
 	})
 
 	for _, p := range []string{"commandcode-goat", "cmc-goat"} {
-		res, ok := fetchProviderUsage(context.Background(), p, map[string]any{"apiKey": "k"})
+		res, ok := fetchProviderUsage(context.Background(), p, map[string]any{"apiKey": "k"}, "")
 		if !ok {
 			t.Fatalf("fetchProviderUsage(%q) returned ok=false", p)
 		}

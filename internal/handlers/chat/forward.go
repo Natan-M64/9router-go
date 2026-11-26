@@ -22,6 +22,7 @@ import (
 	"9router/proxy/internal/semanticcache"
 	"9router/proxy/internal/shutdown"
 	"9router/proxy/internal/translator"
+	"9router/proxy/internal/venicebalance"
 )
 
 // forwardRequest sends the request to the upstream provider and streams/pipes the response.
@@ -49,6 +50,7 @@ func (h *ChatHandler) forwardRequest(
 	// pool would look bound in the dashboard and never be used.
 	httpClient *http.Client,
 	provider string,
+	connectionID string,
 	upstreamClaude bool,
 	clientClaude bool,
 ) error {
@@ -112,6 +114,11 @@ func (h *ChatHandler) forwardRequest(
 	// translated — only provider-level failures may charge the breaker, and a
 	// 401 or 429 says something about the account rather than the provider.
 	h.resilienceReport(provider, cfg, resp.StatusCode)
+	// Venice reports the account's remaining credits on every inference
+	// response. Capture them here, on the one lane that serves it, so the
+	// quota tracker can show the balance an INFERENCE key is not allowed to
+	// read from the billing API. A no-op for every other provider.
+	venicebalance.Record(connectionID, resp.Header)
 	release()
 
 	var bodyCloser io.Closer = resp.Body

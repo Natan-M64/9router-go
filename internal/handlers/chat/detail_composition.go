@@ -12,6 +12,13 @@ import (
 // rest into "other" to keep the stored shape bounded.
 const compositionToolCap = 12
 
+// compositionMessageCap bounds the per-message prefix chain. A prompt-cache
+// cut happens at the first message that moved, and history rewrites land in the
+// early turns; 32 eight-hex entries is 256 bytes in the record and in the
+// per-conversation memo, so an operator can see *where* the prefix broke
+// without this growing with the conversation.
+const compositionMessageCap = 32
+
 // requestComposition describes what the client sent, by role and by tool,
 // without storing any of its text. Bytes are the JSON size of each message's
 // content. The prefix fingerprints hash the system messages and the tools
@@ -47,7 +54,8 @@ func requestComposition(body []byte) map[string]any {
 	roleBytes := map[string]int{}
 	toolBytes := map[string]int{}
 	system := sha256.New()
-	for _, m := range req.Messages {
+	chain := make([]byte, 0, compositionMessageCap*8)
+	for i, m := range req.Messages {
 		var role string
 		_ = json.Unmarshal(m["role"], &role)
 		size := len(m["content"])
@@ -69,6 +77,9 @@ func requestComposition(body []byte) map[string]any {
 		default:
 			roleBytes["other"] += size
 		}
+		if i < compositionMessageCap {
+			chain = append(chain, messageHash(m)...)
+		}
 	}
 
 	return map[string]any{
@@ -78,8 +89,44 @@ func requestComposition(body []byte) map[string]any {
 		"prefix": map[string]string{
 			"system": shortHash(system.Sum(nil)),
 			"tools":  shortHash(hashBytes(req.Tools)),
+			// messages is the ordered chain the cache-break report diffs to
+			// name the first message that moved. Hashes only, never the text.
+			"messages": string(chain),
 		},
 	}
+}
+
+// messageHash is one message's 32-bit FNV-1a over its keys and raw values, in
+// sorted key order so map iteration cannot reorder the input. content and
+// tool_calls dominate by size; role and tool_call_id catch the pointer moves
+// that matter when a message is replaced rather than appended. Written by hand
+// to avoid one hasher allocation per message on the request path.
+func messageHash(m map[string]json.RawMessage) []byte {
+	const prime32 = 16777619
+	h := uint32(2166136261)
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		for i := 0; i < len(k); i++ {
+			h ^= uint32(k[i])
+			h *= prime32
+		}
+		h ^= 0xff
+		h *= prime32
+		for _, b := range m[k] {
+			h ^= uint32(b)
+			h *= prime32
+		}
+	}
+	const hexDigits = "0123456789abcdef"
+	out := make([]byte, 8)
+	for i := 0; i < 8; i++ {
+		out[i] = hexDigits[(h>>uint(28-4*i))&0xf]
+	}
+	return out
 }
 
 // capToolBytes keeps the largest compositionToolCap tools and sums the rest.

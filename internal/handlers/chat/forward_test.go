@@ -17,6 +17,7 @@ import (
 	"9router/proxy/internal/providers"
 	"9router/proxy/internal/proxy/executor"
 	"9router/proxy/internal/translator"
+	"9router/proxy/internal/venicebalance"
 )
 
 // setupHandlerForForward wires a ChatHandler to a temp DB (no connections needed for forward tests).
@@ -65,7 +66,7 @@ func TestForwardRequest_BearerAuth(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	body := []byte(`{"model":"x","messages":[{"role":"user","content":"hi"}]}`)
-	err := h.forwardRequest(context.Background(), rec, cfg, "sk-secret", body, false, false, nil, nil, "openai", false, false)
+	err := h.forwardRequest(context.Background(), rec, cfg, "sk-secret", body, false, false, nil, nil, "openai", "", false, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -93,7 +94,7 @@ func TestForwardRequest_RawAuth(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	body := []byte(`{"model":"x","messages":[]}`)
-	err := h.forwardRequest(context.Background(), rec, cfg, "raw-key", body, false, false, nil, nil, "openai", false, false)
+	err := h.forwardRequest(context.Background(), rec, cfg, "raw-key", body, false, false, nil, nil, "openai", "", false, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -117,7 +118,7 @@ func TestForwardRequest_DefaultAuthWhenUnknownScheme(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	err := h.forwardRequest(context.Background(), rec, cfg, "k", []byte(`{}`), false, false, nil, nil, "openai", false, false)
+	err := h.forwardRequest(context.Background(), rec, cfg, "k", []byte(`{}`), false, false, nil, nil, "openai", "", false, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -141,7 +142,7 @@ func TestForwardRequest_NoAuth(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	err := h.forwardRequest(context.Background(), rec, cfg, "should-not-be-sent", []byte(`{}`), false, false, nil, nil, "openai", false, false)
+	err := h.forwardRequest(context.Background(), rec, cfg, "should-not-be-sent", []byte(`{}`), false, false, nil, nil, "openai", "", false, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -164,7 +165,7 @@ func TestForwardRequest_StaticHeadersApplied(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	err := h.forwardRequest(context.Background(), rec, cfg, "k", []byte(`{}`), false, false, nil, nil, "openai", false, false)
+	err := h.forwardRequest(context.Background(), rec, cfg, "k", []byte(`{}`), false, false, nil, nil, "openai", "", false, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -190,7 +191,7 @@ func TestForwardRequest_UpstreamError(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	err := h.forwardRequest(context.Background(), rec, cfg, "k", []byte(`{}`), false, false, nil, nil, "openai", false, false)
+	err := h.forwardRequest(context.Background(), rec, cfg, "k", []byte(`{}`), false, false, nil, nil, "openai", "", false, false)
 	if err == nil {
 		t.Fatal("expected upstream error")
 	}
@@ -310,7 +311,7 @@ func TestForwardRequest_StreamSetsAcceptHeader(t *testing.T) {
 	body, _ := json.Marshal(map[string]any{"model": "x", "messages": []any{}})
 	ctx := translator.WithUsageCapture(context.Background())
 	rec := httptest.NewRecorder()
-	err := h.forwardRequest(ctx, rec, cfg, "k", body, true, false, &streamMetrics{}, nil, "openai", false, false)
+	err := h.forwardRequest(ctx, rec, cfg, "k", body, true, false, &streamMetrics{}, nil, "openai", "", false, false)
 	if err != nil {
 		t.Fatalf("stream request: %v", err)
 	}
@@ -384,7 +385,7 @@ func TestForwardRequest_NousWireFormat(t *testing.T) {
 	t.Run("reasoning level high", func(t *testing.T) {
 		body := []byte(`{"model":"meituan/longcat-2.0:free","messages":[{"role":"user","content":"hi"}],"reasoning_effort":"high"}`)
 		rec := httptest.NewRecorder()
-		if err := h.forwardRequest(context.Background(), rec, cfg, "test-key", body, false, false, nil, nil, "nous", false, false); err != nil {
+		if err := h.forwardRequest(context.Background(), rec, cfg, "test-key", body, false, false, nil, nil, "nous", "", false, false); err != nil {
 			t.Fatalf("forwardRequest: %v", err)
 		}
 		var parsed map[string]any
@@ -406,7 +407,7 @@ func TestForwardRequest_NousWireFormat(t *testing.T) {
 	t.Run("thinking disabled", func(t *testing.T) {
 		body := []byte(`{"model":"meituan/longcat-2.0:free","messages":[{"role":"user","content":"hi"}],"reasoning_effort":"none"}`)
 		rec := httptest.NewRecorder()
-		if err := h.forwardRequest(context.Background(), rec, cfg, "test-key", body, false, false, nil, nil, "nous", false, false); err != nil {
+		if err := h.forwardRequest(context.Background(), rec, cfg, "test-key", body, false, false, nil, nil, "nous", "", false, false); err != nil {
 			t.Fatalf("forwardRequest: %v", err)
 		}
 		var parsed map[string]any
@@ -424,7 +425,7 @@ func TestForwardRequest_NousWireFormat(t *testing.T) {
 	t.Run("reasoning auto mode", func(t *testing.T) {
 		body := []byte(`{"model":"meituan/longcat-2.0:free","messages":[{"role":"user","content":"hi"}],"reasoning_effort":"auto"}`)
 		rec := httptest.NewRecorder()
-		if err := h.forwardRequest(context.Background(), rec, cfg, "test-key", body, false, false, nil, nil, "nous", false, false); err != nil {
+		if err := h.forwardRequest(context.Background(), rec, cfg, "test-key", body, false, false, nil, nil, "nous", "", false, false); err != nil {
 			t.Fatalf("forwardRequest: %v", err)
 		}
 		var parsed map[string]any
@@ -460,7 +461,7 @@ func TestForwardRequest_NousWireFormat(t *testing.T) {
 		}
 		body := []byte(`{"model":"stepfun/step-5-preview:free","messages":[{"role":"user","content":"hi"}]}`)
 		rec := httptest.NewRecorder()
-		if err := h.forwardRequest(context.Background(), rec, nousCfg, "test-key", body, false, false, nil, client, "nous", false, false); err != nil {
+		if err := h.forwardRequest(context.Background(), rec, nousCfg, "test-key", body, false, false, nil, client, "nous", "", false, false); err != nil {
 			t.Fatalf("forwardRequest: %v", err)
 		}
 		var parsed map[string]any
@@ -490,7 +491,7 @@ func TestForwardRequest_NousWireFormat(t *testing.T) {
 		}
 		body := []byte(`{"model":"stepfun/step-5-preview:free","messages":[{"role":"user","content":"hi"}]}`)
 		rec := httptest.NewRecorder()
-		if err := h.forwardRequest(context.Background(), rec, httpCfg, "test-key", body, false, false, nil, client, "nous", false, false); err != nil {
+		if err := h.forwardRequest(context.Background(), rec, httpCfg, "test-key", body, false, false, nil, client, "nous", "", false, false); err != nil {
 			t.Fatalf("forwardRequest: %v", err)
 		}
 		var parsed map[string]any
@@ -519,7 +520,7 @@ func TestForwardRequest_NousWireFormat(t *testing.T) {
 		}
 		body := []byte(`{"model":"stepfun/step-5-preview:free","messages":[{"role":"user","content":"hi"}]}`)
 		rec := httptest.NewRecorder()
-		if err := h.forwardRequest(context.Background(), rec, evilCfg, "test-key", body, false, false, nil, client, "nous", false, false); err != nil {
+		if err := h.forwardRequest(context.Background(), rec, evilCfg, "test-key", body, false, false, nil, client, "nous", "", false, false); err != nil {
 			t.Fatalf("forwardRequest: %v", err)
 		}
 		var parsed map[string]any
@@ -558,7 +559,7 @@ func TestForwardRequest_NousThinkingNotAppliedToNonNousProvider(t *testing.T) {
 	t.Run("non-nous provider retains top-level reasoning_effort", func(t *testing.T) {
 		body := []byte(`{"model":"meituan/longcat-2.0:free","messages":[{"role":"user","content":"hi"}],"reasoning_effort":"high"}`)
 		rec := httptest.NewRecorder()
-		if err := h.forwardRequest(context.Background(), rec, cfg, "test-key", body, false, false, nil, nil, "openai-compatible-chat-x", false, false); err != nil {
+		if err := h.forwardRequest(context.Background(), rec, cfg, "test-key", body, false, false, nil, nil, "openai-compatible-chat-x", "", false, false); err != nil {
 			t.Fatalf("forwardRequest: %v", err)
 		}
 		var parsed map[string]any
@@ -578,7 +579,7 @@ func TestForwardRequest_NousThinkingNotAppliedToNonNousProvider(t *testing.T) {
 	t.Run("non-nous provider with auto mode retains top-level reasoning_effort", func(t *testing.T) {
 		body := []byte(`{"model":"meituan/longcat-2.0:free","messages":[{"role":"user","content":"hi"}],"reasoning_effort":"auto"}`)
 		rec := httptest.NewRecorder()
-		if err := h.forwardRequest(context.Background(), rec, cfg, "test-key", body, false, false, nil, nil, "openai-compatible-chat-x", false, false); err != nil {
+		if err := h.forwardRequest(context.Background(), rec, cfg, "test-key", body, false, false, nil, nil, "openai-compatible-chat-x", "", false, false); err != nil {
 			t.Fatalf("forwardRequest: %v", err)
 		}
 		var parsed map[string]any
@@ -596,7 +597,7 @@ func TestForwardRequest_NousThinkingNotAppliedToNonNousProvider(t *testing.T) {
 	t.Run("non-nous provider with thinking disabled retains top-level reasoning_effort", func(t *testing.T) {
 		body := []byte(`{"model":"meituan/longcat-2.0:free","messages":[{"role":"user","content":"hi"}],"reasoning_effort":"none"}`)
 		rec := httptest.NewRecorder()
-		if err := h.forwardRequest(context.Background(), rec, cfg, "test-key", body, false, false, nil, nil, "openai-compatible-chat-x", false, false); err != nil {
+		if err := h.forwardRequest(context.Background(), rec, cfg, "test-key", body, false, false, nil, nil, "openai-compatible-chat-x", "", false, false); err != nil {
 			t.Fatalf("forwardRequest: %v", err)
 		}
 		var parsed map[string]any
@@ -616,4 +617,41 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 	return f(r)
+}
+
+// TestForwardRequest_RecordsVeniceBalanceHeader pins the capture the quota
+// tracker reads: Venice publishes the account balance on every inference
+// response, and an inference key cannot read it from the billing API. The
+// header must be stored for the connection that served the request.
+func TestForwardRequest_RecordsVeniceBalanceHeader(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("x-venice-balance-usd", "12.5")
+		w.Header().Set("x-venice-balance-diem", "90.5")
+		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"id":"resp","choices":[{"message":{"content":"hi"}}],"usage":{"prompt_tokens":1,"completion_tokens":1}}`))
+	}))
+	defer srv.Close()
+	venicebalance.ResetForTest(nil)
+	t.Cleanup(func() { venicebalance.ResetForTest(nil) })
+	h, cleanup := setupHandlerForForward(t)
+	defer cleanup()
+	cfg := &providers.ProviderConfig{
+		BaseURL:       srv.URL,
+		AuthScheme:    constants.AuthSchemeBearer,
+		AuthHeader:    constants.HeaderAuthorization,
+		StaticHeaders: map[string]string{},
+	}
+	rec := httptest.NewRecorder()
+	body := []byte(`{"model":"venice-uncensored-1-2","messages":[{"role":"user","content":"hi"}]}`)
+	if err := h.forwardRequest(context.Background(), rec, cfg, "sk-key", body, false, false, nil, nil, "venice", "conn-venice-1", false, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	snap, ok := venicebalance.Latest("conn-venice-1")
+	if !ok {
+		t.Fatal("no balance recorded for the connection")
+	}
+	if snap.USD == nil || *snap.USD != 12.5 || snap.DIEM == nil || *snap.DIEM != 90.5 {
+		t.Errorf("snapshot = %+v, want USD 12.5 and DIEM 90.5", snap)
+	}
 }

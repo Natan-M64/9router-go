@@ -129,3 +129,74 @@ func TestLogUsageStoresCacheBreakForTheConversation(t *testing.T) {
 		t.Errorf("stored causes = %v, want [first-seen system-changed]", causes)
 	}
 }
+
+// The chain is what turns "history-rewritten" into an address: index 0 is the
+// front of the conversation (a prune or a rewritten first turn), a larger index
+// is a mid-history rewrite, and an unchanged chain means the gateway did not
+// break the prefix at all.
+func TestFirstMovedMessage(t *testing.T) {
+	const h = messageHashLen
+	chain := func(parts ...string) string {
+		out := ""
+		for _, p := range parts {
+			out += p
+		}
+		return out
+	}
+	tests := []struct {
+		name      string
+		prev, cur string
+		wantIdx   int
+		wantOK    bool
+	}{
+		{"identical", chain("aaaaaaaa", "bbbbbbbb"), chain("aaaaaaaa", "bbbbbbbb"), 0, false},
+		{"front moved", chain("aaaaaaaa", "bbbbbbbb"), chain("cccccccc", "bbbbbbbb"), 0, true},
+		{"index three moved", chain("a1a1a1a1", "b2b2b2b2", "c3c3c3c3", "d4d4d4d4"), chain("a1a1a1a1", "b2b2b2b2", "c3c3c3c3", "ffffffff"), 3, true},
+		{"append only", chain("aaaaaaaa"), chain("aaaaaaaa", "bbbbbbbb"), 0, false},
+		{"empty previous", "", chain("aaaaaaaa"), 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			idx, ok := firstMovedMessage(tt.prev, tt.cur)
+			if ok != tt.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tt.wantOK)
+			}
+			if ok && idx != tt.wantIdx {
+				t.Errorf("index = %d, want %d", idx, tt.wantIdx)
+			}
+		})
+	}
+	if h != 8 {
+		t.Fatalf("messageHashLen = %d, fixtures are written for 8", h)
+	}
+}
+
+func TestCacheBreakReportNamesTheFirstMovedMessage(t *testing.T) {
+	prev := prefixFingerprint{system: "s", tools: "t", messages: "a1a1a1a1b2b2b2b2c3c3c3c3"}
+	cur := prefixFingerprint{system: "s", tools: "t", messages: "a1a1a1a1b2b2b2b2ffffffff"}
+	r := cacheBreakReport(60000, 20000, cur, prev, true)
+	if r == nil || r["cause"] != "history-rewritten" {
+		t.Fatalf("report = %v, want history-rewritten", r)
+	}
+	if r["firstMovedIndex"] != 2 {
+		t.Errorf("firstMovedIndex = %v, want 2", r["firstMovedIndex"])
+	}
+}
+
+// When every retained hash matches, the gateway forwarded the same prefix and
+// naming it a rewrite would send the operator after a bug that is not there.
+func TestCacheBreakReportPrefixUnchangedWhenHashesMatch(t *testing.T) {
+	same := "a1a1a1a1b2b2b2b2"
+	prev := prefixFingerprint{system: "s", tools: "t", messages: same}
+	cur := prefixFingerprint{system: "s", tools: "t", messages: same}
+	r := cacheBreakReport(60000, 2000, cur, prev, true)
+	if r == nil {
+		t.Fatal("no report")
+	}
+	if r["cause"] != "prefix-unchanged" {
+		t.Errorf("cause = %v, want prefix-unchanged", r["cause"])
+	}
+	if _, ok := r["firstMovedIndex"]; ok {
+		t.Error("an unchanged chain must not name a moved message")
+	}
+}

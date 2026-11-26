@@ -130,3 +130,37 @@ func TestLogUsageStoresCompositionInTheRecord(t *testing.T) {
 		t.Errorf("record composition = %+v, want 5 messages and bash bytes", got.Composition)
 	}
 }
+
+// The per-message chain must move at the first message that changed and stay
+// put for a message that did not, because it is what addresses a cache break.
+func TestRequestCompositionMessageChainMovesAtTheChangedMessage(t *testing.T) {
+	bash := strings.Repeat("b", 400)
+	read := strings.Repeat("r", 100)
+	a := requestComposition(compositionBody("sys", `[]`, bash, read))["prefix"].(map[string]string)["messages"]
+	b := requestComposition(compositionBody("sys", `[]`, bash+"x", read))["prefix"].(map[string]string)["messages"]
+	if a == "" || b == "" {
+		t.Fatal("chain is empty")
+	}
+	idx, ok := firstMovedMessage(a, b)
+	if !ok {
+		t.Fatal("a changed tool result must move the chain")
+	}
+	// system, user, assistant, tool(c1) are unchanged; the changed message is
+	// the fourth entry (index 3).
+	if idx != 3 {
+		t.Errorf("first moved index = %d, want 3", idx)
+	}
+}
+
+// The chain is bounded: a conversation past compositionMessageCap must not grow
+// the record or the memo with its length.
+func TestRequestCompositionMessageChainIsCapped(t *testing.T) {
+	var msgs []string
+	for i := 0; i < compositionMessageCap+10; i++ {
+		msgs = append(msgs, fmt.Sprintf(`{"role":"user","content":"m%d"}`, i))
+	}
+	chain := requestComposition([]byte(`{"messages":[` + strings.Join(msgs, ",") + `]}`))["prefix"].(map[string]string)["messages"]
+	if got, want := len(chain), compositionMessageCap*messageHashLen; got != want {
+		t.Errorf("chain length = %d, want %d", got, want)
+	}
+}

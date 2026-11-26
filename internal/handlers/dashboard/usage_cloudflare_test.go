@@ -204,7 +204,7 @@ func TestCloudflareAiUsageRegistered(t *testing.T) {
 	res, ok := fetchProviderUsage(context.Background(), "cloudflare-ai", map[string]any{
 		"apiKey":               "token",
 		"providerSpecificData": map[string]any{"accountId": "acct"},
-	})
+	}, "")
 	if !ok {
 		t.Fatal("fetchProviderUsage returned ok=false for cloudflare-ai")
 	}

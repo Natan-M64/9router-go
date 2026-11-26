@@ -3,6 +3,7 @@ package handlers
 import (
 	"9router/proxy/internal/db"
 	"9router/proxy/internal/handlerutil"
+	"9router/proxy/internal/providers"
 	"9router/proxy/internal/translator"
 	"9router/proxy/internal/usagetracker"
 	"database/sql"
@@ -102,6 +103,10 @@ type ProviderUsageItem struct {
 	CompletionTokens int64   `json:"completionTokens"`
 	CachedTokens     int64   `json:"cachedTokens"`
 	Cost             float64 `json:"cost"`
+	// Billing separates a metered invoice from list-price cost on a plan or
+	// free quota. `cost` is a list-price estimate for every provider alike;
+	// only "metered" providers charge it per token.
+	Billing string `json:"billing,omitempty"`
 	// LastUsed is the newest request timestamp in the bucket. A daily window
 	// cannot fill it (a usageDaily row is keyed by date and carries no time),
 	// so the dashboard renders it blank there rather than inventing midnight.
@@ -168,6 +173,13 @@ type UsageStatsResponse struct {
 	TotalCompletionTokens int64                        `json:"totalCompletionTokens"`
 	TotalCachedTokens     int64                        `json:"totalCachedTokens"`
 	TotalCost             float64                      `json:"totalCost"`
+	// TotalCostMetered is the share of TotalCost attributable to per-token
+	// billing; TotalCostIncluded is list-price cost on a subscription, plan
+	// quota or free tier, which was never invoiced. Unclassified covers
+	// providers this build cannot classify (custom compatible endpoints).
+	TotalCostMetered      float64                      `json:"totalCostMetered"`
+	TotalCostIncluded     float64                      `json:"totalCostIncluded"`
+	TotalCostUnclassified float64                      `json:"totalCostUnclassified"`
 	ByProvider            map[string]ProviderUsageItem `json:"byProvider"`
 	ByModel               map[string]ModelUsageItem    `json:"byModel"`
 	ByAccount             map[string]AccountUsageItem  `json:"byAccount"`
@@ -569,7 +581,18 @@ func HandleUsageStats(repo *db.Repo) http.HandlerFunc {
 
 		// Calculate total aggregates from byProvider
 		successfulRequests := 0
-		for _, p := range resp.ByProvider {
+		for key, p := range resp.ByProvider {
+			mode := providers.BillingModeForProvider(key)
+			p.Billing = string(mode)
+			resp.ByProvider[key] = p
+			switch mode {
+			case providers.BillingMetered:
+				resp.TotalCostMetered += p.Cost
+			case providers.BillingIncluded:
+				resp.TotalCostIncluded += p.Cost
+			default:
+				resp.TotalCostUnclassified += p.Cost
+			}
 			successfulRequests += p.Requests
 			resp.TotalPromptTokens += p.PromptTokens
 			resp.TotalCompletionTokens += p.CompletionTokens

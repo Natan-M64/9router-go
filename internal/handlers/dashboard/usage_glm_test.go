@@ -182,7 +182,7 @@ func TestGLMUsage_ParseAndFetch(t *testing.T) {
 		// Connection with apiKey only
 		res, ok := fetchProviderUsage(context.Background(), "glm", map[string]any{
 			"apiKey": "pasted-api-key",
-		})
+		}, "")
 		if !ok || res.plan != "Standard" {
 			t.Fatalf("expected ok=true and plan=Standard for apiKey, got ok=%v res=%+v", ok, res)
 		}
@@ -190,7 +190,7 @@ func TestGLMUsage_ParseAndFetch(t *testing.T) {
 		// Connection with accessToken only (OAuth-minted key)
 		resOAuth, okOAuth := fetchProviderUsage(context.Background(), "glm", map[string]any{
 			"accessToken": "oauth-plan-key",
-		})
+		}, "")
 		if !okOAuth || resOAuth.plan != "Standard" {
 			t.Fatalf("expected ok=true and plan=Standard for accessToken, got ok=%v res=%+v", okOAuth, resOAuth)
 		}
