@@ -48,6 +48,7 @@ var planProviders = map[string]string{
 	"opencode-go": "OpenCode Go subscription: $5/mo (then 10/mo)",
 	"ollama":      "Free tier: light usage … Pro $20/mo · Max $100/mo",
 	"xiaomi-mimo": "Xiaomi MiMo Token Plan subscription",
+	"glm-cn":      "Z.AI Coding Plan",
 }
 
 func BillingModeForProvider(providerID string) BillingMode {
@@ -59,7 +60,7 @@ func BillingModeForProvider(providerID string) BillingMode {
 	if _, plan := planProviders[strings.ToLower(strings.TrimSpace(meta.ID))]; plan {
 		return BillingIncluded
 	}
-	if meta.Category == CategoryCustom {
+	if meta.Category == CategoryCustom || meta.ID == "muse" {
 		return BillingUnknown
 	}
 	if meta.NoAuth {

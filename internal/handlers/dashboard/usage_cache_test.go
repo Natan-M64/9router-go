@@ -35,6 +35,24 @@ func TestUsageReadCache_TTLAndKeyChange(t *testing.T) {
 	}
 }
 
+func TestWriteUsagePayload_DoesNotCacheFailures(t *testing.T) {
+	oldCache := usageReadCache
+	usageReadCache = newUsageReadCacheStore()
+	t.Cleanup(func() { usageReadCache = oldCache })
+
+	conn := &models.ProviderConnection{ID: "transient", Provider: "deepseek"}
+	payload := map[string]any{"message": "DeepSeek error: temporary network failure", "quotas": map[string]any{}}
+	recorder := httptest.NewRecorder()
+	writeUsagePayload(recorder, conn, usageCacheKey(conn), payload)
+
+	if _, hit := usageReadCache.get(conn.ID, usageCacheKey(conn)); hit {
+		t.Fatal("transient provider failure must not be cached")
+	}
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", recorder.Code)
+	}
+}
+
 func TestUsageReadCache_StaysBounded(t *testing.T) {
 	cache := newUsageReadCacheStore()
 	base := time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)

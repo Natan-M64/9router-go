@@ -13,6 +13,8 @@ func TestBillingModeForProvider(t *testing.T) {
 		{name: "oauth subscription is included", provider: "codex", want: BillingIncluded},
 		{name: "oauth quota provider is included", provider: "antigravity", want: BillingIncluded},
 		{name: "free provider is included", provider: "gemini-cli", want: BillingIncluded},
+		{name: "GLM China API keys use a coding plan", provider: "glm-cn", want: BillingIncluded},
+		{name: "Muse mixed subscription and API key lane is unclassified", provider: "muse", want: BillingUnknown},
 		{name: "alias resolves to the canonical entry", provider: "cx", want: BillingIncluded},
 		{
 			name:     "free tier listing with an api key is metered",

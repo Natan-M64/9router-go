@@ -25,6 +25,8 @@ func TestHandleUsageStats_SplitsMeteredFromIncludedCost(t *testing.T) {
 		"byProvider": {
 			"deepseek":                 {"requests": 5, "promptTokens": 1000, "completionTokens": 100, "cost": 0.07},
 			"codex":                    {"requests": 2, "promptTokens": 9000, "completionTokens": 200, "cost": 1.20},
+			"glm-cn":                   {"requests": 1, "promptTokens": 300, "completionTokens": 30, "cost": 0.04},
+			"muse":                     {"requests": 1, "promptTokens": 200, "completionTokens": 20, "cost": 0.05},
 			"openai-compatible-local":  {"requests": 1, "promptTokens": 300, "completionTokens": 30, "cost": 0.03}
 		}
 	}`
@@ -48,6 +50,8 @@ func TestHandleUsageStats_SplitsMeteredFromIncludedCost(t *testing.T) {
 	wantBilling := map[string]string{
 		"deepseek":                "metered",
 		"codex":                   "included",
+		"glm-cn":                  "included",
+		"muse":                    "unknown",
 		"openai-compatible-local": "unknown",
 	}
 	for provider, want := range wantBilling {
@@ -67,7 +71,7 @@ func TestHandleUsageStats_SplitsMeteredFromIncludedCost(t *testing.T) {
 		}
 	}
 	assertClose("TotalCostMetered", resp.TotalCostMetered, 0.07)
-	assertClose("TotalCostIncluded", resp.TotalCostIncluded, 1.20)
-	assertClose("TotalCostUnclassified", resp.TotalCostUnclassified, 0.03)
-	assertClose("TotalCost", resp.TotalCost, 1.30)
+	assertClose("TotalCostIncluded", resp.TotalCostIncluded, 1.24)
+	assertClose("TotalCostUnclassified", resp.TotalCostUnclassified, 0.08)
+	assertClose("TotalCost", resp.TotalCost, 1.39)
 }

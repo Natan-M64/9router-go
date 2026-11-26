@@ -126,6 +126,8 @@ func usageForceRequested(raw string) bool {
 // successful payloads reach this helper, so a transient failure is never
 // cached for the next reopen.
 func writeUsagePayload(w http.ResponseWriter, conn *models.ProviderConnection, cacheKey string, payload map[string]any) {
-	usageReadCache.put(conn.ID, cacheKey, payload)
+	if _, hasMessage := payload["message"]; !hasMessage {
+		usageReadCache.put(conn.ID, cacheKey, payload)
+	}
 	handlerutil.WriteJSON(w, http.StatusOK, payload)
 }
