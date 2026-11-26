@@ -1,7 +1,7 @@
 # Status
 
 Updated 2026-11-26 · Fork `Natan-M64/9router-go` (upstream `luqman-v1/9router-go` / `decolua/9router`)
-Current milestone: **Billing cost basis and Venice quota submitted in PR #2** (`feat/billing-venice`); local `main` remains 7 commits behind `fork/main` (`ccd37917` guardrail policies, `1706621d` session revocation on password change, `49b9f097` jailbreak per-key delete, wiki/images). Next: address review feedback and await CI/review.
+Current milestone: **Billing cost basis and Venice quota merged** in PR #2 (`ccb977dc`); local `main` synchronized to `fork/main`. Next: sync 43 upstream commits in a dedicated branch; merge preview reports conflicts in `Makefile`, jailbreak tests/UI, and usage handler; finish live MVP proof and investigate usage findings.
 Last proof: [journal/2026-11.md](journal/2026-11.md).
 Optimization plan: [optimization-roadmap.md](optimization-roadmap.md) · RTK filters: [RTK_FILTERS.md](RTK_FILTERS.md).
 Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
@@ -10,8 +10,8 @@ Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 
 | ID | Expected result | State |
 |---|---|---|
-| N1 | **Billing and quota**: Venice prices checked against the operator's invoice; metered spend kept apart from list-price cost (`opencode-go`, `ollama`, `xiaomi-mimo` misclassified before); Venice balance from inference headers with an optional ADMIN probe; 70 s usage cache with frontend hydration; cache-break diagnosis with divergent index and cost | Submitted in PR #2 (`a907da3e`); review fixes pushed. 7 days after restart: metered `$0.2217`, list-price `$30.6896`, unclassified `$0`. |
-| O2 | **MVP proof, remainder**: Claude, Codex, OpenRouter, Venice, DeepSeek and opencode-go answered 200 (plain and stream); gemini, groq and kilocode (status `unavailable` on the instance) and the CI `integration` job are still to be checked | Partial. |
+| N1 | **Billing and quota**: Venice prices checked against the operator's invoice; metered spend kept apart from list-price cost (`opencode-go`, `ollama`, `xiaomi-tokenplan` corrected); Venice balance from inference headers with an optional ADMIN probe; 70 s usage cache with frontend hydration; cache-break diagnosis with divergent index and cost | Merged in PR #2 (`ccb977dc`). 7 days after restart: metered `$0.2217`, list-price `$30.6896`, unclassified `$0`. |
+| O2 | **MVP proof, remainder**: Claude, Codex, OpenRouter, Venice, DeepSeek and opencode-go answered 200; `ocg/deepseek-v4.1-flash-free` also completed a live Kilo text request with 200. Need stream/tool-call JSON probes; gemini/groq/kilocode availability and post-merge CI remain to be checked | Partial. |
 
 ## Next (in order)
 
@@ -37,7 +37,8 @@ Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 | R10 | A bare-429 retry cost 1–2.5 s on 4 of 4 large requests in one conversation. A learned-shape memo now skips it from the second turn (per conversation, 15 min, falls back to the regular shape if refused); the trigger did not reproduce (176 KB prompt, 30 tools), so real benefit is unverified | Confirm in the log that "retrying with systemInstruction" only appears on the first turn. |
 | R5 | RTK + built-in Headroom double pass measured at no cost (209.8 ms with and without), so roadmap 1.2a does not hold | REFUTED in the roadmap. |
 | R11 | A reply hit `finish_reason: length` at 1133 tokens (limit 65536) on `main-fast` → `antigravity/gemini-4-hydrogen-low`. The gateway relays Gemini's `MAX_TOKENS` unchanged; the sent `maxOutputTokens` and `thoughtsTokenCount` are not recorded | Records now carry `finishReason` and the client's `maxTokens`; check both on the next `length`. |
-| R12 | This session runs **through** the local gateway, so stopping or restarting that process cuts the session and the operator has to start it again by hand. The running binary predates the uncommitted tree, so what `:20130` serves is not what `main` now contains | Never stop/kill the gateway from tooling; commit, rebuild and let the operator restart. |
+| R12 | This session runs **through** the local gateway, so stopping or restarting that process cuts the session and the operator has to start it again by hand. The running binary predates the current source tree | Never stop/kill the gateway from tooling; rebuild and let the operator restart. |
+| R13 | Kilo `JSON parsing failed` on `ocg/deepseek-v4.1-flash-free`: the provider packs the tool-call chunk and the `finish_reason:"tool_calls"` terminal chunk with a single `\n` between them, so a strict client reads one SSE event carrying two JSON payloads. `SSECopy.writeEvents` now splits consecutive `data:` lines with a blank separator (`internal/proxy/sse_copy.go`, test `sse_packed_data_events_test.go`); the test was red before the fix and green after, and `go vet ./...` + full `go test ./...` pass | Rebuilt and restarted (PID 77779). Post-restart: 12 tool-call streams, 219 events, 207 JSON payloads, 0 adjacent `data:` lines, every run closed with `[DONE]` — no regression. The intermittent upstream packing did not reproduce live, so the deterministic proof remains the unit test. |
 | R2 | The GHCR package `ghcr.io/natan-m64/9router-go` may be private by default on GitHub Packages | The user switches visibility to Public if `docker pull` without login is wanted. |
 
 ## Done in the last 7 days

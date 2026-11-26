@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	stdjson "encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,6 +30,13 @@ const (
 	// sseTailSize is the rolling window used to catch a terminal token split
 	// across two reads.
 	sseTailSize = 64
+)
+
+// Reused event-separation bytes. writeRaw never mutates its input, so these
+// can be shared instead of allocating a new slice on every split or blank fix.
+var (
+	sseNL   = []byte("\n")
+	sseNLNL = []byte("\n\n")
 )
 
 // SSECopy reads from upstream in a raw loop and writes each chunk to the client.
@@ -115,6 +123,19 @@ type sseCopier struct {
 	// patchers rewrite a complete data line's payload before it is relayed
 	// (e.g. the reasoning-alias lift); nil slices relay verbatim.
 	patchers []func([]byte) []byte
+	// lastLineData reports whether the most recent relayed line was a `data:`
+	// line with no blank line since. Some providers pack two chunks
+	// back-to-back with a single '\n' between them, which per SSE is one event
+	// whose payload is both lines joined — a strict client then fails to
+	// JSON-parse two objects. A `data:` line following another one therefore
+	// gains a blank separator (upstream ocg tool-call streams, 2026-11-26).
+	lastLineData bool
+	// lastDataValid reports whether the payload of that last `data:` line is
+	// a complete JSON value on its own. The split only happens when both the
+	// previous and the current payload are independently valid, so a provider
+	// that splits one JSON object across several `data:` lines keeps its
+	// single event.
+	lastDataValid bool
 	// seenInbandError tracks a provider-injected error event swallowed from
 	// the relay. inbandCode/Msg hold the first one seen; the turn fails only
 	// when no completion preceded it (inbandFailure).
@@ -169,10 +190,26 @@ func (c *sseCopier) hold(frag []byte) error {
 // `finish_reason: "stop"` frame is injected first. Bytes after the sentinel
 // are dropped — nothing valid follows [DONE].
 //
+// Two `data:` lines that arrive with only a single '\n' between them are split
+// by a blank line. OpenAI chat streams carry one JSON payload per event; a
+// strict client (Kilo / AI SDK, OpenAI SDK) joins the two `data:` lines into a
+// single event payload separated by '\n' and fails with `JSON Parse error`
+// when the provider packs a tool-call chunk and its terminal chunk
+// back-to-back. A provider that already emits the blank line is untouched.
+//
+// The split is restricted to independently complete JSON payloads: two
+// adjacent `data:` lines are separated only when both carry a complete JSON
+// value on their own. A provider that legitimately splits one JSON object
+// across several `data:` lines of the same event is therefore preserved — the
+// first line is not complete JSON, so no separator is inserted and the client
+// still receives one event. Validity is checked only on `data:` lines; plain
+// content chunks that skip the tool-call patcher are the only extra scan.
+//
 // Provider-injected error lines are swallowed, not relayed, so a dead
-// downstream never masquerades as content. Forwarding stays line-at-a-time:
-// segStart only ever trails already-written bytes, so the first content byte
-// is flushed exactly as fast as before (no holdback).
+// downstream never masquerades as content. Forwarding stays batched by
+// segment: the separator only breaks the segment when one is actually needed,
+// so the common (already separated) stream pays no extra allocation, and the
+// first content byte is flushed exactly as fast as before.
 func (c *sseCopier) writeEvents(complete []byte) error {
 	start, segStart := 0, 0
 	for start < len(complete) {
@@ -189,6 +226,8 @@ func (c *sseCopier) writeEvents(complete []byte) error {
 				return err
 			}
 			segStart = eol + 1
+			// The swallowed line is not relayed, so the boundary state of
+			// the last emitted line is unchanged.
 			start = eol + 1
 			continue
 		}
@@ -196,14 +235,91 @@ func (c *sseCopier) writeEvents(complete []byte) error {
 			if err := c.writeRaw(complete[segStart:start]); err != nil {
 				return err
 			}
+			patchedValid := sseDataPayloadValid(patched)
+			// patchLine only rebuilds a `data:` line, so a separator is
+			// needed exactly when both payloads are independently valid.
+			if c.lastLineData && c.lastDataValid && patchedValid {
+				if err := c.writeRaw(sseNL); err != nil {
+					return err
+				}
+			}
 			if err := c.writeRaw(patched); err != nil {
 				return err
 			}
 			segStart = eol + 1
+			c.lastLineData = true
+			c.lastDataValid = patchedValid
+			start = eol + 1
+			continue
+		}
+		isData := sseLineIsData(line)
+		var curValid bool
+		if isData {
+			curValid = sseDataPayloadValid(line)
+			// Two independently complete JSON payloads with no blank between
+			// them: close the first event before the second one is written.
+			// A payload that is not complete JSON (a provider splitting one
+			// object across data: lines) stays joined, as SSE intends.
+			if c.lastLineData && c.lastDataValid && curValid {
+				if err := c.writeRaw(complete[segStart:start]); err != nil {
+					return err
+				}
+				if err := c.writeRaw(sseNL); err != nil {
+					return err
+				}
+				segStart = start
+			}
+		}
+		c.trackEventBoundary(line, isData)
+		if isData {
+			c.lastDataValid = curValid
 		}
 		start = eol + 1
 	}
 	return c.writeRaw(complete[segStart:])
+}
+
+// trackEventBoundary records whether line left an event carrying a payload.
+// Only a blank line terminates an SSE event, so `event:`, `id:`, `retry:` and
+// comment lines leave the previous `data:` state in place; a following `data:`
+// line therefore still belongs to the same event and is split by the caller
+// under this lane's one-JSON-per-`data:`-line assumption.
+func (c *sseCopier) trackEventBoundary(line []byte, isData bool) {
+	if isData {
+		c.lastLineData = true
+		return
+	}
+	if sseLineIsBlank(line) {
+		c.lastLineData = false
+	}
+}
+
+// sseLineIsData reports whether a line (including its terminator) carries a
+// `data:` field.
+func sseLineIsData(line []byte) bool {
+	trimmed := bytes.TrimLeft(line, " \t")
+	return bytes.HasPrefix(trimmed, []byte("data:"))
+}
+
+// sseLineIsBlank reports whether a line is an event-separating blank line.
+func sseLineIsBlank(line []byte) bool {
+	return len(bytes.Trim(line, " \t\r\n")) == 0
+}
+
+// sseDataPayloadValid reports whether a `data:` line carries a complete JSON
+// value on its own. It is the guard that keeps the packed-event split from
+// breaking a provider that legitimately spreads one JSON object across several
+// `data:` lines of a single SSE event.
+func sseDataPayloadValid(line []byte) bool {
+	trimmed := bytes.TrimLeft(line, " \t")
+	if !bytes.HasPrefix(trimmed, []byte("data:")) {
+		return false
+	}
+	payload := bytes.TrimSpace(trimmed[len("data:"):])
+	if len(payload) == 0 || bytes.Equal(payload, []byte("[DONE]")) {
+		return false
+	}
+	return stdjson.Valid(payload)
 }
 
 // patchLine repairs one complete data line (including its terminator): the
@@ -457,9 +573,9 @@ func (c *sseCopier) writeRaw(p []byte) error {
 func (c *sseCopier) ensureBlank() error {
 	switch c.trailingNL {
 	case 0:
-		return c.writeRaw([]byte("\n\n"))
+		return c.writeRaw(sseNLNL)
 	case 1:
-		return c.writeRaw([]byte("\n"))
+		return c.writeRaw(sseNL)
 	default:
 		return nil
 	}
