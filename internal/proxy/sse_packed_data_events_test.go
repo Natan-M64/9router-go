@@ -34,6 +34,12 @@ func TestSSECopy_SplitsPackedDataEvents(t *testing.T) {
 	crlfTool := strings.TrimSuffix(packedToolChunk, "\n") + "\r\n"
 	crlfTerm := strings.TrimSuffix(packedTermChunk, "\n") + "\r\n"
 
+	// A provider that spreads one JSON object across two `data:` lines of the
+	// same event must keep its single event: only the first line is incomplete
+	// JSON, so no separator may be inserted.
+	multiLine := `data: {"choices":` + "\n" +
+		`data: [{"delta":{"content":"hi"},"finish_reason":"stop"}]}` + "\n\n"
+
 	exact := func(want string) func(*testing.T, string) {
 		return func(t *testing.T, out string) {
 			if got := strings.Count(out, "data: [DONE]"); got != 1 {
@@ -105,6 +111,12 @@ func TestSSECopy_SplitsPackedDataEvents(t *testing.T) {
 					t.Fatalf("data line after a comment must be split; got %q", out)
 				}
 			},
+		},
+		{
+			name:   "multiline_json_event_not_split",
+			input:  multiLine,
+			reader: plainReader,
+			check:  exact(multiLine + packedDoneFrame),
 		},
 	}
 
