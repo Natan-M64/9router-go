@@ -27,7 +27,7 @@ func openTestRepo(t *testing.T) *db.Repo {
 func TestRunMaintain_StaticAPIKeysOnlyDoesNothing(t *testing.T) {
 	repo := openTestRepo(t)
 
-	if err := repo.CreateProviderConnectionFull("conn-apikey-1", "openai", "apikey", "test-apikey", nil, `{"apiKey":"sk-test-123"}`); err != nil {
+	if err := repo.CreateProviderConnectionFull(context.Background(), "conn-apikey-1", "openai", "apikey", "test-apikey", nil, `{"apiKey":"sk-test-123"}`); err != nil {
 		t.Fatalf("CreateProviderConnectionFull: %v", err)
 	}
 
@@ -47,7 +47,7 @@ func TestRunMaintain_DryRunDetectsExpiringOAuth(t *testing.T) {
 	expSoon := now.Add(10 * time.Minute).Format(time.RFC3339)
 	data := `{"accessToken":"at-1","refreshToken":"rt-1","expiresAt":"` + expSoon + `"}`
 
-	if err := repo.CreateProviderConnectionFull("conn-oauth-1", "codex", "oauth", "test-oauth", nil, data); err != nil {
+	if err := repo.CreateProviderConnectionFull(context.Background(), "conn-oauth-1", "codex", "oauth", "test-oauth", nil, data); err != nil {
 		t.Fatalf("CreateProviderConnectionFull: %v", err)
 	}
 

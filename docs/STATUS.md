@@ -1,7 +1,7 @@
 # Status
 
 Updated 2026-11-26 · Fork `Natan-M64/9router-go` (upstream `luqman-v1/9router-go` / `decolua/9router`)
-Current milestone: **Billing cost basis and Venice quota merged** in PR #2 (`ccb977dc`); local `main` synchronized to `fork/main`. Next: sync 43 upstream commits in a dedicated branch; merge preview reports conflicts in `Makefile`, jailbreak tests/UI, and usage handler; finish live MVP proof and investigate usage findings.
+Current milestone: **upstream sync merged locally** — `origin/main` (`67a4bc94`, v1.9.17, 44 commits) merged into `sync/upstream-20`, five conflicts resolved, local gates green; PR to `fork/main` pending. Next: open the PR, re-diagnose the `ocg` packed-SSE error (R13 recurred), finish the MVP proofs.
 Last proof: [journal/2026-11.md](journal/2026-11.md).
 Optimization plan: [optimization-roadmap.md](optimization-roadmap.md) · RTK filters: [RTK_FILTERS.md](RTK_FILTERS.md).
 Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
@@ -38,7 +38,7 @@ Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 | R5 | RTK + built-in Headroom double pass measured at no cost (209.8 ms with and without), so roadmap 1.2a does not hold | REFUTED in the roadmap. |
 | R11 | A reply hit `finish_reason: length` at 1133 tokens (limit 65536) on `main-fast` → `antigravity/gemini-4-hydrogen-low`. The gateway relays Gemini's `MAX_TOKENS` unchanged; the sent `maxOutputTokens` and `thoughtsTokenCount` are not recorded | Records now carry `finishReason` and the client's `maxTokens`; check both on the next `length`. |
 | R12 | This session runs **through** the local gateway, so stopping or restarting that process cuts the session and the operator has to start it again by hand. The running binary predates the current source tree | Never stop/kill the gateway from tooling; rebuild and let the operator restart. |
-| R13 | Kilo `JSON parsing failed` on `ocg/deepseek-v4.1-flash-free`: the provider packs the tool-call chunk and the `finish_reason:"tool_calls"` terminal chunk with a single `\n` between them, so a strict client reads one SSE event carrying two JSON payloads. `SSECopy.writeEvents` now splits consecutive `data:` lines with a blank separator (`internal/proxy/sse_copy.go`, test `sse_packed_data_events_test.go`); the test was red before the fix and green after, and `go vet ./...` + full `go test ./...` pass | Rebuilt and restarted (PID 77779). Post-restart: 12 tool-call streams, 219 events, 207 JSON payloads, 0 adjacent `data:` lines, every run closed with `[DONE]` — no regression. The intermittent upstream packing did not reproduce live, so the deterministic proof remains the unit test. |
+| R13 | Kilo `JSON parsing failed` on `ocg/deepseek-v4.1-flash-free`: the provider packs the tool-call chunk and the `finish_reason:"tool_calls"` terminal chunk with a single `\n`, so a strict client reads one event with two JSON payloads. `SSECopy.writeEvents` splits consecutive `data:` lines with a blank separator (`internal/proxy/sse_copy.go`, `sse_packed_data_events_test.go`), red before the fix and green after | **Recurred 2026-11-26**: same shape, second object is the terminal `tool_calls` chunk. Next: capture it live and check whether the `ocg` dispatch path or a read-boundary split bypasses the separator. |
 | R2 | The GHCR package `ghcr.io/natan-m64/9router-go` may be private by default on GitHub Packages | The user switches visibility to Public if `docker pull` without login is wanted. |
 
 ## Done in the last 7 days
@@ -50,12 +50,7 @@ Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 
 ## Verified (2026-11-26)
 
-- `go test ./... -count=1` exit 0 on the current tree: 11,327 tests in 84 packages (second run captured to a log, `EXIT=0`, no `FAIL`).
-- `bun test src scripts`: 1057 pass / 0 fail, 2040 assertions, 82 files. `bun run ratchet:svelte`: 0 unresolved identifiers, 0 errors.
-- Same tree, earlier today: `make test-integration`, `bun run build`, `oxlint` and both e2e suites (`quotaTrackerCache`, `usageCostBasis`) passed; the cache e2e failed on the base build without hydration, so it is a real regression test.
-- Not re-run after the last edit: `make cross`, `go test -race`, Docker/GHCR.
-- Token efficiency observed: prompt cache saved 412,247,811 tokens over 3,175 requests (about `$204.01`); compression saved 15,532,204 tokens.
+- `sync/upstream-20`, after merging `origin/main` (`67a4bc94`): `go build ./...` and `go vet ./...` exit 0; `go test -count=1 ./...` exit 0 (80 packages `ok`, 5 without tests, no `FAIL`); `make test-integration` exit 0; `bun test src scripts` 1091 pass / 0 fail; `bun run ratchet:svelte` 0 unresolved identifiers, 0 errors; `bunx oxlint --deny-warnings` exit 0.
+- Not re-run after the merge: `make cross`, `go test -race`, the e2e dashboard suites, the PostgreSQL smoke; no independent review of the merge.
 
-## Verified (2026-11-24)
 
-Moved to the journal: [journal/2026-11.md](journal/2026-11.md) — live DeepSeek records after restart, `make ci-local` (77 packages) and CI green, the upstream sync with `ds/deepseek-v4.1-flash` 400 → 200, and the live chat/stream pass. Not verified then: gemini/groq/kilocode, real Playwright snapshots, `jailbreak`/`plans` deep-link redirect.
