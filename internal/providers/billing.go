@@ -39,16 +39,17 @@ const (
 // planProviders are reached with an API key but paid for by a fixed-price
 // plan, so a per-token list price is not an invoice. The registry Notice of
 // each entry states the plan; it is quoted so the classification can be
-// audited against the catalog.
+// audited against the catalog. xiaomi-mimo stays metered: its ordinary API
+// keys use a separate endpoint from the Xiaomi Token Plan lane.
 //
 // opencode-go is the one that matters in practice: it is the busiest provider
 // on a typical install, and treating its list price as spend overstated the
 // metered figure by an order of magnitude.
 var planProviders = map[string]string{
-	"opencode-go": "OpenCode Go subscription: $5/mo (then 10/mo)",
-	"ollama":      "Free tier: light usage … Pro $20/mo · Max $100/mo",
-	"xiaomi-mimo": "Xiaomi MiMo Token Plan subscription",
-	"glm-cn":      "Z.AI Coding Plan",
+	"opencode-go":      "OpenCode Go subscription: $5/mo (then 10/mo)",
+	"ollama":           "Free tier: light usage … Pro $20/mo · Max $100/mo",
+	"xiaomi-tokenplan": "Xiaomi MiMo Token Plan subscription",
+	"glm-cn":           "Z.AI Coding Plan",
 }
 
 func BillingModeForProvider(providerID string) BillingMode {
