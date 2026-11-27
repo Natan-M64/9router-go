@@ -2029,7 +2029,7 @@ func antigravityDashboardHeaders(accessToken string) map[string]string {
 		"User-Agent":       antigravityDashboardUA,
 		"Content-Type":     "application/json",
 		"X-Client-Name":    "antigravity",
-		"X-Client-Version": providers.AntigravityIDEVersion,
+		"X-Client-Version": providers.AntigravityCLIVersion,
 	}
 }
 

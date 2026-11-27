@@ -274,6 +274,79 @@ func TestIpkArchiveLayout(t *testing.T) {
 	}
 }
 
+// TestSysupgradeKeepsDatabase pins the difference between a firmware flash
+// that keeps the operator's gateway and one that wipes it.
+//
+// OpenWrt's sysupgrade preserves only what /etc/sysupgrade.conf and
+// /lib/upgrade/keep.d/* name, plus changed conffiles. The default keep set is
+// base-files-essential (a handful of /etc files) and a commented-out
+// /etc/sysupgrade.conf, so nothing this package owns is preserved unless the
+// package ships a keep.d drop-in. Before this test existed the package shipped
+// none, and the database was discarded on every flash while the documentation
+// promised otherwise.
+func TestSysupgradeKeepsDatabase(t *testing.T) {
+	dist := buildOnce(t)
+	blob, err := os.ReadFile(filepath.Join(dist, "x86_64", "9router-go_1.9.14_x86_64.ipk"))
+	if err != nil {
+		t.Fatalf("read ipk: %v", err)
+	}
+	members, err := parseAr(blob)
+	if err != nil {
+		t.Fatalf("parse ar: %v", err)
+	}
+	data := untarGz(t, members[2]["data.tar.gz"])
+	raw, ok := data["lib/upgrade/keep.d/9router-go"]
+	if !ok {
+		t.Fatalf("package ships no /lib/upgrade/keep.d/9router-go; sysupgrade would discard the database")
+	}
+	// Comments and blank lines are stripped by sysupgrade's own reader
+	// (`sed -ne '/^[[:space:]]*$/d; /^#/d; p'`), so only the paths are compared.
+	var kept []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	for _, want := range []string{"/etc/9router-go", "/opt/9router/db", "/opt/9router/uploads"} {
+		found := false
+		for _, got := range kept {
+			if got == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("keep.d does not name %s; paths are %v", want, kept)
+		}
+	}
+	// The binary copy must NOT be in the keep list: it is ~52 MB, sysupgrade
+	// stages its backup in /tmp (RAM), and postinst rewrites the copy anyway.
+	// Listing it turns a firmware flash on a 128 MB router into an OOM event.
+	for _, got := range kept {
+		if strings.Contains(got, "/bin") {
+			t.Errorf("keep.d must not name binaries (%s): the backup is staged in RAM", got)
+		}
+	}
+	// A non-default data_dir cannot be covered by a static file, so postinst
+	// has to add it to /etc/sysupgrade.conf. Without this the operator who moved
+	// the database to a USB mount silently loses it on the next flash.
+	postinst := string(untarGz(t, members[1]["control.tar.gz"])["postinst"])
+	if !strings.Contains(postinst, "/etc/sysupgrade.conf") {
+		t.Error("postinst never records a custom data_dir in /etc/sysupgrade.conf")
+	}
+	// /etc/config/9router-go must be a conffile. That stanza is what stops opkg
+	// from overwriting the operator's settings on upgrade, and it is the same
+	// mechanism that keeps them across a flash — so its absence is a silent
+	// reset of port, data_dir and password on the next `opkg upgrade`, with no
+	// error anywhere. Pinned here because nothing else reads that file.
+	conffiles := string(untarGz(t, members[1]["control.tar.gz"])["conffiles"])
+	if !strings.Contains(conffiles, "/etc/config/9router-go") {
+		t.Errorf("conffiles does not list /etc/config/9router-go; an upgrade would overwrite the operator's settings (got %q)", conffiles)
+	}
+}
+
 func TestLuciPackageIsArchAllWithLuaTree(t *testing.T) {
 	dist := buildOnce(t)
 	path := filepath.Join(dist, "x86_64", "luci-app-9router-go_1.9.14_all.ipk")
@@ -400,6 +473,72 @@ func TestNoCarriageReturnsInScripts(t *testing.T) {
 	}
 	if checked < 8 {
 		t.Fatalf("expected at least 8 shell scripts across both packages, checked %d", checked)
+	}
+}
+
+// TestBackupCoversUploads pins the part of the backup contract an operator only
+// notices after a restore onto a new router: the database is not the only state.
+// The test extracts the shipped script and greps it, because the behaviour
+// itself needs a target file system; the assertion here is that the script
+// still archives data_dir/uploads and restores it beside the database.
+func TestBackupCoversUploads(t *testing.T) {
+	dist := buildOnce(t)
+	blob, err := os.ReadFile(filepath.Join(dist, "x86_64", "9router-go_1.9.14_x86_64.ipk"))
+	if err != nil {
+		t.Fatalf("read ipk: %v", err)
+	}
+	members, err := parseAr(blob)
+	if err != nil {
+		t.Fatalf("parse ar: %v", err)
+	}
+	script, ok := untarGz(t, members[2]["data.tar.gz"])["usr/bin/9router-go-backup"]
+	if !ok {
+		t.Fatal("backup helper missing from the package")
+	}
+	for _, want := range []string{
+		`uploads="$data_dir/uploads"`,
+		`arch="$out.uploads.tar"`,
+		`tar -C "$data_dir" -cf "$arch" uploads`,
+		`arch="$in.uploads.tar"`,
+		`tar -C "$data_dir" -xf "$arch"`,
+	} {
+		if !bytes.Contains(script, []byte(want)) {
+			t.Errorf("backup helper no longer carries %q", want)
+		}
+	}
+}
+
+// TestPrermKeepsUserData pins the safe half of the uninstall: the program's own
+// artifacts are removed, the operator's database and uploads are not. Deleting
+// the database on removal would destroy every provider connection and API key,
+// and a mistaken `opkg remove` would be unrecoverable on a device with no other
+// copy.
+func TestPrermKeepsUserData(t *testing.T) {
+	dist := buildOnce(t)
+	blob, err := os.ReadFile(filepath.Join(dist, "x86_64", "9router-go_1.9.14_x86_64.ipk"))
+	if err != nil {
+		t.Fatalf("read ipk: %v", err)
+	}
+	members, err := parseAr(blob)
+	if err != nil {
+		t.Fatalf("parse ar: %v", err)
+	}
+	script, ok := untarGz(t, members[1]["control.tar.gz"])["prerm"]
+	if !ok {
+		t.Fatal("prerm missing from the control archive")
+	}
+	if !bytes.Contains(script, []byte(`rm -f "$data_dir/bin/9router-go"`)) {
+		t.Error("prerm no longer removes the runtime binary copy")
+	}
+	for _, forbidden := range []string{
+		`rm -rf "$data_dir"`,
+		`rm -f "$data_dir/db/data.sqlite"`,
+		`rm -rf "$data_dir/db"`,
+		`rm -rf "$data_dir/uploads"`,
+	} {
+		if bytes.Contains(script, []byte(forbidden)) {
+			t.Errorf("prerm must not destroy user state, found %q", forbidden)
+		}
 	}
 }
 

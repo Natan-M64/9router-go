@@ -1,0 +1,84 @@
+name: Upstream Fork Sync
+
+on:
+  schedule:
+    - cron: '23 9 * * *'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Open a draft PR if the preview passes
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: upstream-fork-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'Natan-M64/9router-go' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Preview merge without checking out upstream code
+        id: preview
+        run: |
+          git fetch --no-tags https://github.com/luqman-v1/9router-go.git refs/heads/main
+          bash scripts/upstream-sync-preview.sh HEAD FETCH_HEAD
+
+      # Use a separate, repository-scoped credential so the draft can trigger PR CI.
+      - name: Publish draft only when opted in
+        if: >-
+          steps.preview.outputs.tree != '' &&
+          ((github.event_name == 'workflow_dispatch' && inputs.publish) ||
+           (github.event_name == 'schedule' && vars.UPSTREAM_SYNC_PUBLISH == 'true'))
+        env:
+          GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+          BASE: ${{ steps.preview.outputs.base }}
+          UPSTREAM: ${{ steps.preview.outputs.upstream }}
+          TREE: ${{ steps.preview.outputs.tree }}
+          COUNT: ${{ steps.preview.outputs.count }}
+        run: |
+          if [[ -z $GH_TOKEN ]]; then
+            printf 'Publishing requires the UPSTREAM_SYNC_TOKEN repository secret.\n' >&2
+            exit 1
+          fi
+
+          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --state open --limit 100 \
+            --json headRefName,isCrossRepository,url --jq '.[] | select(.isCrossRepository == false and (.headRefName | startswith("sync/upstream-"))) | .url')
+          if [[ -n $existing ]]; then
+            printf 'A sync PR is already open:\n%s\n' "$existing"
+            exit 0
+          fi
+
+          gh auth setup-git --hostname github.com
+          remote_base=$(git ls-remote --exit-code origin refs/heads/main | cut -f1)
+          if [[ $remote_base != "$BASE" ]]; then
+            printf 'Fork main moved after preview; rerun against the new base.\n' >&2
+            exit 1
+          fi
+
+          branch="sync/upstream-automation/$BASE-$UPSTREAM"
+          date=$(git show -s --format=%cI "$UPSTREAM")
+          export GIT_AUTHOR_NAME='upstream-sync' GIT_COMMITTER_NAME='upstream-sync'
+          export GIT_AUTHOR_EMAIL='upstream-sync@users.noreply.github.com'
+          export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL" GIT_AUTHOR_DATE="$date" GIT_COMMITTER_DATE="$date"
+          commit=$(git commit-tree "$TREE" -p "$BASE" -p "$UPSTREAM" -m "chore(sync): merge upstream through ${UPSTREAM:0:12}")
+          git push origin "$commit:refs/heads/$branch"
+          body=$(printf 'Fork base: %s\nUpstream: luqman-v1/9router-go at %s\nIncoming commits: %s\n\nThis merge passed Git preview only. Review fork behavior and require CI before merging. Use a merge commit to preserve upstream ancestry.' \
+            "$BASE" "$UPSTREAM" "$COUNT")
+          gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" --draft \
+            --title "chore(sync): merge upstream through ${UPSTREAM:0:12}" --body "$body"

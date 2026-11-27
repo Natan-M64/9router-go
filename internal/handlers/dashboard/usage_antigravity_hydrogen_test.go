@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"9router/proxy/internal/providers"
 )
 
 const antigravityHydrogenModelsBody = `{
@@ -109,5 +111,19 @@ func TestAntigravityUsageToken_AGYACPSourceReference(t *testing.T) {
 	})
 	if token != "source-tok" || project != "source-proj" {
 		t.Errorf("agy-acp source credentials = (%q, %q), want (source-tok, source-proj)", token, project)
+	}
+}
+
+// TestAntigravityDashboardHeaders_ClientVersionMatchesUA pins the identity pair
+// the usage RPCs present. The UA is the CLI fingerprint, so X-Client-Version
+// must carry the CLI version; sending the IDE version beside a CLI UA is the
+// one shape no real client produces.
+func TestAntigravityDashboardHeaders_ClientVersionMatchesUA(t *testing.T) {
+	headers := antigravityDashboardHeaders("tok")
+	if got := headers["User-Agent"]; got != providers.AntigravityCLIUserAgent {
+		t.Errorf("User-Agent = %q, want %q", got, providers.AntigravityCLIUserAgent)
+	}
+	if got := headers["X-Client-Version"]; got != providers.AntigravityCLIVersion {
+		t.Errorf("X-Client-Version = %q, want %q", got, providers.AntigravityCLIVersion)
 	}
 }
