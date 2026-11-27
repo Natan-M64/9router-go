@@ -5,7 +5,9 @@
   Git failure exits non-zero.
 - Draft-PR publication is gated on `status=ready`, so a stopped preview can never
   publish. Duplicate suppression covers every open same-repo `sync/` PR, and
-  `actions/checkout` moves to v4.4.0 to drop the Node 20 deprecation warning.
+  `actions/checkout` moves to v4.4.0, the latest release in the v4 major used
+  across the workflows. The Node.js 20 deprecation warning that action still
+  emits clears only with checkout v5 or newer.
 - `docs/upstream-sync.md` records the statuses, guards, publication opt-in with
   `UPSTREAM_SYNC_TOKEN` scopes, and the release-commit resolution.
 - Verified with six preview scenarios against real history plus `shellcheck` and
