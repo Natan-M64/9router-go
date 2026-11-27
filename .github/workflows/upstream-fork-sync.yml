@@ -27,12 +27,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: main
           fetch-depth: 0
           persist-credentials: false
 
+      # Guards stop the preview with a warning instead of a failed run; only the
+      # status output decides whether publication is allowed.
       - name: Preview merge without checking out upstream code
         id: preview
         run: |
@@ -42,7 +44,7 @@ jobs:
       # Use a separate, repository-scoped credential so the draft can trigger PR CI.
       - name: Publish draft only when opted in
         if: >-
-          steps.preview.outputs.tree != '' &&
+          steps.preview.outputs.status == 'ready' &&
           ((github.event_name == 'workflow_dispatch' && inputs.publish) ||
            (github.event_name == 'schedule' && vars.UPSTREAM_SYNC_PUBLISH == 'true'))
         env:
@@ -58,7 +60,7 @@ jobs:
           fi
 
           existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --state open --limit 100 \
-            --json headRefName,isCrossRepository,url --jq '.[] | select(.isCrossRepository == false and (.headRefName | startswith("sync/upstream-"))) | .url')
+            --json headRefName,isCrossRepository,url --jq '.[] | select(.isCrossRepository == false and (.headRefName | startswith("sync/"))) | .url')
           if [[ -n $existing ]]; then
             printf 'A sync PR is already open:\n%s\n' "$existing"
             exit 0
