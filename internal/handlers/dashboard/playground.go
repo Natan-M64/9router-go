@@ -20,17 +20,27 @@ import (
 // and gets the same Chat Completions JSON the public lane would return. The
 // turn reaches it the way the Gemini surface already does
 // (chat/gemini_v1beta.go): a synthetic request through the engine's own
-// HandleChatCompletions. Routing, combo fallback, persona injection, the
-// limiter and usage accounting are therefore the production paths, not a
-// second implementation that can drift.
+// HandleChatCompletions. Routing, provider admission, combo fallback, persona
+// injection and usage accounting are therefore the production paths, not a
+// second implementation that can drift. When dashboard login is enabled, only
+// a session or CLI token can use this endpoint; an engine key cannot bypass the
+// public route's per-key rate-limit middleware or choose another key's scope.
 //
 // Attribution: the picked key travels on the synthetic request's context, the
 // same place RequireApiKey puts it, so the usage row names the key as the
-// client (chat/usage.go), its budget is measured, and its model allowlist is
-// enforced by the gate the public lane uses. An empty keyId is the global
+// client (chat/usage.go) and its model allowlist is enforced by the gate the
+// public lane uses. An empty keyId is the global
 // scope: a keyless caller, which the engine treats as unrestricted for model
 // policy (effectiveAllowedModels returns empty for a nil key).
 func (h *DashboardHandler) HandlePlaygroundChat(w http.ResponseWriter, r *http.Request) {
+	if h.Repo == nil {
+		handlerutil.WriteJSONError(w, http.StatusServiceUnavailable, "repository unavailable")
+		return
+	}
+	if !middleware.CallerIsDashboardPrivileged(h.Repo, r) {
+		handlerutil.WriteJSONError(w, http.StatusForbidden, "playground requires dashboard session or CLI token")
+		return
+	}
 	if h.ChatH == nil {
 		handlerutil.WriteJSONError(w, http.StatusServiceUnavailable, "chat engine unavailable")
 		return

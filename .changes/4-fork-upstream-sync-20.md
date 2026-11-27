@@ -30,6 +30,11 @@
   imported into this PR: the file remains at the fork base, the fork's existing
   `.changes` fragments are retained, and incoming upstream changes use their
   fragment files.
+- PR review fixes: Playground calls require a dashboard-privileged caller when
+  login is enabled; IP concurrency slots release after admitted requests and
+  unresolved addresses do not share a bucket; Antigravity project IDs update
+  atomically; Anthropic message-start/empty-text preamble frames are relayed
+  with the first content frame.
 - Verified: `go build ./...` and `go vet ./...` exit 0; `go test -count=1 ./...`
   exit 0 (80 packages, no failure); `make test-integration` exit 0; `bun test
   src scripts` 1091 pass / 0 fail; `bun run ratchet:svelte` 0 errors;
@@ -37,4 +42,7 @@
   -count=1 ./...` passed (85 packages), `go vet ./...` exited 0, and
   `make test-integration` passed. An independent merge review found no lost
   fork changes or blockers; it noted one upstream-only double parse in
-  `live_catalog_opencode.go` for separate follow-up consideration.
+  `live_catalog_opencode.go` for separate follow-up consideration. Review fixes
+  pass full Go tests/vet, full `make test-integration`, Playground-focused
+  integration, middleware/proxy race tests, peeker edge cases and `gofmt`;
+  PostgreSQL smoke requires `TEST_PG_DSN` and was skipped locally.

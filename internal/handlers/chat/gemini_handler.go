@@ -247,25 +247,9 @@ func (h *ChatHandler) storeAntigravityProjectID(connectionID, pid string) {
 		return
 	}
 	go func() {
-		if h.Repo == nil {
-			return
+		if err := h.Repo.UpdateProviderConnectionProjectID(context.Background(), connectionID, pid); err != nil {
+			log.Warn("gemini", "persist Antigravity project id failed", "conn", connectionID, "error", err)
 		}
-		ctx := context.Background()
-		existing, _ := h.Repo.GetProviderConnectionByID(connectionID)
-		if existing == nil {
-			return
-		}
-		dataMap := map[string]any{}
-		if jerr := json.Unmarshal([]byte(existing.Data), &dataMap); jerr != nil {
-			dataMap = map[string]any{}
-		}
-		dataMap["projectId"] = pid
-		raw, _ := json.Marshal(dataMap)
-		name := ""
-		if existing.Name != nil {
-			name = *existing.Name
-		}
-		_ = h.Repo.ReplaceProviderConnectionPayload(ctx, connectionID, name, string(raw))
 	}()
 }
 

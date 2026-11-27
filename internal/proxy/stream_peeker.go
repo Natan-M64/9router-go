@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	json "encoding/json/v2"
 	"errors"
 	"net/http"
 	"strings"
@@ -116,6 +117,33 @@ func hasSSEContentLine(s string) bool {
 	return false
 }
 
+func isAnthropicPreamble(chunk []byte) bool {
+	if !bytes.Contains(chunk, []byte("message_start")) && !bytes.Contains(chunk, []byte("content_block_start")) {
+		return false
+	}
+	var frame struct {
+		Type         string `json:"type"`
+		ContentBlock struct {
+			Type string `json:"type"`
+		} `json:"content_block"`
+	}
+	for _, line := range bytes.Split(chunk, []byte{'\n'}) {
+		line = bytes.TrimSpace(line)
+		if !bytes.HasPrefix(line, []byte("data:")) {
+			continue
+		}
+		payload := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
+		if json.Unmarshal(payload, &frame) != nil {
+			continue
+		}
+		if frame.Type == "message_start" ||
+			frame.Type == "content_block_start" && frame.ContentBlock.Type == "text" {
+			return true
+		}
+	}
+	return false
+}
+
 // StreamContentPeeker buffers initial SSE frames until content is observed.
 type StreamContentPeeker struct {
 	http.ResponseWriter
@@ -198,11 +226,11 @@ func (p *StreamContentPeeker) Write(b []byte) (int, error) {
 	//     are classified when the next write completes the frame.
 	//   - does the frame carry an answer? A complete frame whose text is
 	//     banner-shaped is held so the turn can be retried; one whose text is
-	//     an answer commits; a complete frame with NO text is structural
-	//     (Anthropic thinking / signature_delta) and commits, because
-	//     holding those starves the first-output gate — but a frame with no
-	//     text AND no structural markers (role-only, finish-only) is the
-	//     zero-content turn the caller retries, so it is dropped.
+	//     an answer commits. Anthropic message_start and empty text-block starts
+	//     are held as preamble until the answer arrives; thinking/signature
+	//     frames are structural content and commit. A frame with no text AND no
+	//     known structural markers (role-only, finish-only) is the zero-content
+	//     turn the caller retries, so it is dropped.
 	if p.heldContent {
 		return p.writeHeld(b)
 	}
@@ -227,6 +255,14 @@ func (p *StreamContentPeeker) Write(b []byte) (int, error) {
 	// role-only or finish-only frame is the zero-content turn the caller
 	// retries, and committing it would answer 200 with nothing.
 	if !HasSSEContent(b) {
+		if isAnthropicPreamble(b) {
+			p.buf.Write(b)
+			if p.buf.Len() >= bannerHoldLimit {
+				p.sawContent = true
+				p.commitLocked()
+			}
+			return len(b), nil
+		}
 		return len(b), nil
 	}
 	p.sawContent = true
@@ -296,8 +332,17 @@ func (p *StreamContentPeeker) writeHeld(b []byte) (int, error) {
 		p.buf.Write(chunk)
 		return len(b), nil
 	case text == "" && !HasSSEContent(chunk):
-		// Zero-content turn: the held bytes carried no prose and no
-		// structural marker. Drop them; Finish fails the turn.
+		if isAnthropicPreamble(chunk) {
+			p.heldContent = false
+			p.buf.Write(chunk)
+			if p.buf.Len() >= bannerHoldLimit {
+				p.sawContent = true
+				p.commitLocked()
+			}
+			return len(b), nil
+		}
+		// Zero-content turn: the held bytes carried no prose and no known
+		// structural preamble. Drop them; Finish fails the turn.
 		p.heldContent = false
 		return len(b), nil
 	default:

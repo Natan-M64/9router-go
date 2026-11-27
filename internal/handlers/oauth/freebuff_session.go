@@ -169,7 +169,7 @@ func (h *OAuthHandler) HandleFreebuffSessionStatus(w http.ResponseWriter, r *htt
 				refused = "country_blocked"
 			}
 		}
-	updateConnectionFreebuffModel(r.Context(), h.Repo, conn, "")
+		updateConnectionFreebuffModel(r.Context(), h.Repo, conn, "")
 		handlerutil.WriteJSON(w, http.StatusOK, freebuffSessionResponse(conn, map[string]any{
 			"status": refused,
 		}))
@@ -293,7 +293,7 @@ func (h *OAuthHandler) HandleFreebuffSessionStatus(w http.ResponseWriter, r *htt
 	}
 	if status == "active" && currentModel != "" {
 		updateConnectionFreebuffModel(r.Context(), h.Repo, conn, currentModel)
-		} else if status == "none" || status == "unauthorized" || status == "banned" {
+	} else if status == "none" || status == "unauthorized" || status == "banned" {
 		updateConnectionFreebuffModel(r.Context(), h.Repo, conn, "")
 	}
 

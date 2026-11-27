@@ -134,6 +134,25 @@ func TestAcquireIPWithoutCeilingIsFree(t *testing.T) {
 	}
 }
 
+func TestAcquireIPUnknownAddressDoesNotShareABucket(t *testing.T) {
+	rl := NewRateLimiter(time.Minute)
+	limits := IPLimits{PerMinute: 1, Concurrency: 1}
+
+	for i := range 2 {
+		if _, ok := rl.AcquireIP(context.Background(), "unknown", limits, 0); !ok {
+			t.Fatalf("request %d from an unresolved address was refused", i+1)
+		}
+	}
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	if _, exists := rl.windows[IPScopeKey("unknown")]; exists {
+		t.Error("unresolved clients must not share an IP request window")
+	}
+	if _, exists := rl.active[IPScopeKey("unknown")]; exists {
+		t.Error("unresolved clients must not share an IP concurrency slot")
+	}
+}
+
 // The IP slot is namespaced, so an address can never collide with a key id or a
 // provider id that happens to spell the same string.
 func TestIPScopeKeyIsNamespaced(t *testing.T) {

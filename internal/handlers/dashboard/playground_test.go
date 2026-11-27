@@ -13,6 +13,9 @@ import (
 func TestHandlePlaygroundChat_RejectsExpiredAPIKey(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
+	if err := repo.UpdateSettingsRaw(map[string]any{"requireLogin": false}); err != nil {
+		t.Fatalf("disable dashboard login: %v", err)
+	}
 
 	if err := repo.CreateApiKey("key-exp", "sk-exp-1", "expired-key", ""); err != nil {
 		t.Fatalf("CreateApiKey: %v", err)
@@ -56,6 +59,26 @@ func TestHandlePlaygroundChat_NilRepoWithKeyIDReturns503(t *testing.T) {
 		defer func() {
 			if r := recover(); r != nil {
 				t.Fatalf("HandlePlaygroundChat panicked on nil Repo: %v", r)
+			}
+		}()
+		h.HandlePlaygroundChat(rec, req)
+	}()
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503 (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlePlaygroundChat_NilRepoWithoutKeyIDReturns503(t *testing.T) {
+	h := &DashboardHandler{ChatH: &chat.ChatHandler{}}
+	body := `{"model":"gpt-4o","messages":[{"role":"user","content":"hi"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/playground/chat", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("HandlePlaygroundChat panicked with nil Repo: %v", r)
 			}
 		}()
 		h.HandlePlaygroundChat(rec, req)

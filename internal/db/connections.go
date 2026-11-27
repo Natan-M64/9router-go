@@ -244,6 +244,20 @@ func (r *Repo) ReplaceProviderConnectionPayload(ctx context.Context, id, name, d
 	return nil
 }
 
+// UpdateProviderConnectionProjectID updates only the discovered project id in
+// the connection JSON so a concurrent token refresh cannot be overwritten by
+// a stale read-modify-write of the full payload.
+func (r *Repo) UpdateProviderConnectionProjectID(ctx context.Context, id, projectID string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE providerConnections SET data = json_set(data, '$.projectId', ?), updatedAt = ? WHERE id = ?`,
+		projectID, nowUTC(), id,
+	)
+	if err != nil {
+		return fmt.Errorf("update provider connection project id %s: %w", id, err)
+	}
+	return nil
+}
+
 // GetConnectedProviders returns the set of provider ids that have at least one
 // connection row. Used to seed the auto free-tier combo with models that are
 // actually reachable from the user's configured providers.

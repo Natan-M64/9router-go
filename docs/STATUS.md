@@ -1,7 +1,7 @@
 # Status
 
-Updated 2026-11-26 · Fork `Natan-M64/9router-go` (upstream `luqman-v1/9router-go` / `decolua/9router`)
-Current milestone: **upstream sync in PR #4** (`Natan-M64/9router-go`, branch `sync/upstream-20`) — `origin/main` through `46a9b69d` merged; the follow-up delta (17 unique commits, 7 first-parent) had no conflicts. Go unit, vet, and integration gates pass. Next: PR CI, then the operator restarts the gateway to deploy the rebuilt binary (R13).
+Updated 2026-11-27 · Fork `Natan-M64/9router-go` (upstream `luqman-v1/9router-go` / `decolua/9router`)
+Current milestone: **review fixes for upstream sync PR #4** (`Natan-M64/9router-go`, branch `sync/upstream-20`) — authorization, IP concurrency, project-ID persistence, SSE preamble and lint findings have fixes with local regression coverage. Next: publish the update, wait for PR CI (including PostgreSQL), then the operator restarts the rebuilt binary (R13).
 Last proof: [journal/2026-11.md](journal/2026-11.md).
 Optimization plan: [optimization-roadmap.md](optimization-roadmap.md) · RTK filters: [RTK_FILTERS.md](RTK_FILTERS.md).
 Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
@@ -48,7 +48,8 @@ Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 - **Catalog, thinking UX and combos (`eb29c708`, `f1166342`, `41ea97db`)**: `gpt-6.2-sol`, `-sol[1m]`, `gpt-6.2-astra`, `-astra[1m]`, `gpt-6.1-terra`, a weekly upstream check, `thinkingLevels` badges, a per-model `Thinking:` selector, and `9router-combos-v1`/`omniroute-combos-v1` import-export with provider-abbreviation mapping.
 - **Stabilisation (`d242f9ff` to `da41a01c`)**: daemon recognised by start time on macOS 27, `make ci-local`, images only on tags, RTK filter selection and result cache, snapshot compaction, prompt-cache fixes, OpenRouter `cache_control`, the DeepSeek wire name, the upstream sync and changelog fragments.
 
-## Verified (2026-11-26)
+## Verified (2026-11-27)
 
 - `sync/upstream-20`, after merging `origin/main` through `46a9b69d`: `go test -count=1 ./...` passed (85 packages), `go vet ./...` exited 0, and `make test-integration` passed. Independent review found no lost fork changes or blockers.
 - Not run for this sync: `make cross`, `go test -race`, the e2e dashboard suites, the PostgreSQL smoke, and OpenWrt shell validation.
+- Review-fix validation: full `go test -count=1 ./...`, `go vet ./...`, and `make test-integration` pass; Playground, SSE peeker and IP-limiter regression tests pass under focused race runs; `gofmt -d` and `git diff --check` are clean. PostgreSQL smoke skips locally because `TEST_PG_DSN` is unavailable; PR CI must verify it.

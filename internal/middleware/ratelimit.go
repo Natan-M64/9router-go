@@ -953,6 +953,9 @@ func RequireRateLimit(rl *RateLimiter, defaults Defaults, usage TokenUsageReader
 					rejectIPRateLimited(w, ip)
 					return
 				}
+				if ipLimits.Concurrency > 0 && ip != "" && ip != "unknown" {
+					defer rl.ReleaseConcurrency(IPScopeKey(ip))
+				}
 			}
 
 			// RPM, RPH, RPD and concurrency: admit now if there is room,
@@ -1640,7 +1643,10 @@ func IPScopeKey(ip string) string { return "ip:" + ip }
 // A zero timeout means "test once and refuse", which is the behaviour every
 // unconfigured install would get if the gate ran at all.
 func (rl *RateLimiter) AcquireIP(ctx context.Context, ip string, limits IPLimits, timeout time.Duration) (waited time.Duration, ok bool) {
-	if rl == nil || ip == "" || !limits.Armed() {
+	// `unknown` is a resolver sentinel, not an address. Sharing one bucket for
+	// every request without a usable peer address would let one caller exhaust
+	// another's quota and concurrency slot.
+	if rl == nil || ip == "" || ip == "unknown" || !limits.Armed() {
 		return 0, true
 	}
 	return rl.acquireScoped(ctx, IPScopeKey(ip), limits.spansForIP(rl.window), limits.Concurrency, timeout)

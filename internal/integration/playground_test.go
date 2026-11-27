@@ -12,8 +12,8 @@ import (
 
 // The playground is a dashboard surface that dispatches through the engine's
 // own chat lane, so its contract has two halves: the dashboard gate admits a
-// session (and a client key, like every dashboard route), and the turn itself
-// behaves exactly like a public-lane call — the upstream sees the bare model,
+// privileged session, and the turn itself behaves like a public-lane call —
+// the upstream sees the bare model,
 // the connection's credential, and the reply comes back as Chat Completions.
 func TestPlaygroundChatForwardsThroughEngine(t *testing.T) {
 	env, upstream := newProviderEnv(t)
@@ -24,7 +24,7 @@ func TestPlaygroundChatForwardsThroughEngine(t *testing.T) {
 			{"role": "user", "content": "Summarize the Go memory model."},
 		},
 		"stream": false,
-	})
+	}, playgroundSessionOptions(t)...)
 	if res.Status != http.StatusOK {
 		t.Fatalf("POST /api/playground/chat = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -64,7 +64,7 @@ func TestPlaygroundChatAttributesUsageToKey(t *testing.T) {
 			{"role": "user", "content": "Summarize the Go memory model."},
 		},
 		"keyId": "integration-key",
-	})
+	}, playgroundSessionOptions(t)...)
 	if res.Status != http.StatusOK {
 		t.Fatalf("POST /api/playground/chat with keyId = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -100,7 +100,7 @@ func TestPlaygroundChatEnforcesKeyAllowlist(t *testing.T) {
 			{"role": "user", "content": "Summarize the Go memory model."},
 		},
 		"keyId": "integration-key",
-	})
+	}, playgroundSessionOptions(t)...)
 	if res.Status != http.StatusForbidden {
 		t.Fatalf("POST /api/playground/chat with denied model = %d, want 403 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -119,7 +119,7 @@ func TestPlaygroundChatRejectsUnknownKey(t *testing.T) {
 			{"role": "user", "content": "Summarize the Go memory model."},
 		},
 		"keyId": "no-such-key",
-	})
+	}, playgroundSessionOptions(t)...)
 	if res.Status != http.StatusBadRequest {
 		t.Fatalf("POST /api/playground/chat with unknown key = %d, want 400 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -158,4 +158,35 @@ func TestPlaygroundChatRequiresDashboardAuth(t *testing.T) {
 	if res.Status != http.StatusOK {
 		t.Fatalf("session POST /api/playground/chat = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
+}
+
+func TestPlaygroundChatRejectsClientKeyWhenLoginRequired(t *testing.T) {
+	env, upstream := newProviderEnv(t)
+	if err := env.Repo.UpdateSettingsRaw(map[string]any{"requireLogin": true}); err != nil {
+		t.Fatalf("set requireLogin: %v", err)
+	}
+
+	res := env.Post(t, "/api/playground/chat", map[string]any{
+		"model":  "deepseek/deepseek-chat",
+		"stream": false,
+		"messages": []map[string]any{
+			{"role": "user", "content": "should be denied"},
+		},
+		"keyId": "integration-key",
+	})
+	if res.Status != http.StatusForbidden {
+		t.Fatalf("client-key POST /api/playground/chat = %d, want 403 (body: %s)", res.Status, truncate(res.Body))
+	}
+	if upstream.Count() != 0 {
+		t.Fatalf("client key dispatched %d upstream requests, want none", upstream.Count())
+	}
+}
+
+func playgroundSessionOptions(t *testing.T) []RequestOpt {
+	t.Helper()
+	session, err := auth.Sign(auth.Secret(), time.Now())
+	if err != nil {
+		t.Fatalf("sign dashboard session: %v", err)
+	}
+	return []RequestOpt{WithoutAPIKey(), WithHeader("Cookie", auth.CookieName+"="+session)}
 }
