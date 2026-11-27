@@ -1,7 +1,7 @@
 # Status
 
 Updated 2026-11-27 · Fork `Natan-M64/9router-go` (upstream `luqman-v1/9router-go` / `decolua/9router`)
-Current milestone: **review fixes for upstream sync PR #4** (`Natan-M64/9router-go`, branch `sync/upstream-20`) — authorization, IP concurrency, project-ID persistence, SSE preamble and lint findings have fixes with local regression coverage. Next: publish the update, wait for PR CI (including PostgreSQL), then the operator restarts the rebuilt binary (R13).
+Current milestone: **upstream sync 21** (`sync/upstream-21`) — PR #4 was merged. The next merge, from fork base `641e842d` through upstream `de05f24d`, is prepared locally. Conflict resolutions retain the fork's `ci-local` target and Antigravity account-ban handling, and adopt upstream's race timeout, context-aware scoped error write, and contributor counts. Next: finalize the merge commit and publish a PR when authorized; require CI, including PostgreSQL, before merging to `main`.
 Last proof: [journal/2026-11.md](journal/2026-11.md).
 Optimization plan: [optimization-roadmap.md](optimization-roadmap.md) · RTK filters: [RTK_FILTERS.md](RTK_FILTERS.md).
 Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.

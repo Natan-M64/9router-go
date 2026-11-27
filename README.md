@@ -122,8 +122,17 @@ irm https://raw.githubusercontent.com/luqman-v1/9router-go/main/install.ps1 | ie
 9router-go status         # is it running? (pid, dashboard, log)
 9router-go restart        # replace the running daemon
 9router-go logs -n 100    # tail the background log
+9router-go doctor         # why is it not reachable? port, pid, data dir, db
 9router-go stop           # stop it
 ```
+
+`doctor` is the diagnostic for a gateway that will not answer. `status` tells
+you whether a daemon is alive; `doctor` tells you *why* it is not, checking the
+resolved port, the pid claim, whether the listening socket belongs to the
+gateway or a foreign process, the data directory's writability, the database
+file, and a failed-bind marker in the run log. Each failing line names the
+platform command that fixes it (`netstat`/`taskkill` on Windows, `lsof`/`kill`
+elsewhere). `--port` diagnoses an address other than the one `PORT` resolves.
 
 The detached process records itself in `DATA_DIR/run/gateway.pid` and writes its
 output to `DATA_DIR/run/gateway.log`. A second `start` while one is running
@@ -486,6 +495,7 @@ POST /v1/images/edits           Image editing
 POST /v1/videos/generations     Video generation
 POST /v1/audio/speech           Text to speech
 POST /v1/audio/transcriptions   Speech to text
+POST /v1/audio/translations   Speech translation
 POST /v1/search                 Web search
 GET  /api/usage/stream          Live usage SSE
 GET  /health                    Liveness
