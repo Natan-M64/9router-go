@@ -4,10 +4,12 @@ package db
 
 import (
 	"context"
+	json "encoding/json/v2"
 	"fmt"
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestPGJSONSetProductionShapes exercises the exact json_set call shapes the
@@ -59,6 +61,33 @@ func TestPGJSONSetProductionShapes(t *testing.T) {
 	for _, want := range []string{`"backoffLevel": 0`, `"lastError": {"m": "oauth"}`, `"oauthFailureCount": 3`} {
 		if !strings.Contains(data, want) {
 			t.Errorf("stored JSON %s missing %s", data, want)
+		}
+	}
+
+	repo := NewRepo(db)
+	id := fmt.Sprintf("pg-project-id-%d", time.Now().UnixNano())
+	priority := 1
+	if err := repo.CreateProviderConnectionFull(ctx, id, "antigravity", "oauth", "PG project id test", &priority, `{"accessToken":"retained","refreshToken":"refresh"}`); err != nil {
+		t.Fatalf("create provider connection: %v", err)
+	}
+	if err := repo.UpdateProviderConnectionProjectID(ctx, id, "project-1"); err != nil {
+		t.Fatalf("UpdateProviderConnectionProjectID: %v", err)
+	}
+	conn, err := repo.GetProviderConnectionByID(id)
+	if err != nil {
+		t.Fatalf("GetProviderConnectionByID: %v", err)
+	}
+	var connectionData map[string]string
+	if err := json.Unmarshal([]byte(conn.Data), &connectionData); err != nil {
+		t.Fatalf("decode connection data: %v", err)
+	}
+	for key, want := range map[string]string{
+		"accessToken":  "retained",
+		"refreshToken": "refresh",
+		"projectId":    "project-1",
+	} {
+		if connectionData[key] != want {
+			t.Errorf("connection data[%q] = %q, want %q", key, connectionData[key], want)
 		}
 	}
 }

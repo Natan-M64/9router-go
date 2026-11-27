@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"context"
 	json "encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -82,7 +83,7 @@ func TestHandleGetConnectionUsage_CachesReopenAndHonoursForce(t *testing.T) {
 
 	const id = "conn-cache"
 	const seeded = `{"modelLock_demo-model":"2099-01-01T00:00:00Z"}`
-	if err := repo.CreateProviderConnectionFull(id, "nous", "apikey", "locked", nil, seeded); err != nil {
+	if err := repo.CreateProviderConnectionFull(context.Background(), id, "nous", "apikey", "locked", nil, seeded); err != nil {
 		t.Fatalf("seed connection: %v", err)
 	}
 
@@ -120,10 +121,10 @@ func TestHandleGetConnectionUsage_CachesReopenAndHonoursForce(t *testing.T) {
 
 	// Two edits in the same second share an updatedAt, which is why the key
 	// hashes the data as well. The second edit clears the lock row.
-	if err := repo.ReplaceProviderConnectionPayload(id, "locked", seeded); err != nil {
+	if err := repo.ReplaceProviderConnectionPayload(context.Background(), id, "locked", seeded); err != nil {
 		t.Fatalf("replace payload: %v", err)
 	}
-	if err := repo.ReplaceProviderConnectionPayload(id, "unlocked", `{}`); err != nil {
+	if err := repo.ReplaceProviderConnectionPayload(context.Background(), id, "unlocked", `{}`); err != nil {
 		t.Fatalf("clear payload: %v", err)
 	}
 	body := read("")

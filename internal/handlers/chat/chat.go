@@ -916,6 +916,37 @@ func (h *ChatHandler) HandleModelsByKind(w http.ResponseWriter, r *http.Request)
 			if !match {
 				continue
 			}
+			// For image generation the provider name alone is not a usable id:
+			// the generation endpoint resolves "{provider}/{model}" and rejects
+			// a bare alias ("could not resolve model: xai"). List the provider's
+			// actual image models, so discovery output can be fed straight back
+			// into POST /v1/images/generations.
+			if kind == "image" {
+				if imageModels := providers.ImageModelsForProvider(id); len(imageModels) > 0 {
+					for _, modelID := range imageModels {
+						data = append(data, map[string]any{
+							"id":       id + "/" + modelID,
+							"object":   "model",
+							"kind":     kind,
+							"owned_by": id,
+							"endpoint": kindEndpoint(kind),
+							"created":  now,
+						})
+					}
+					continue
+				}
+				// An ImageURL with no recognisable catalog entry (a relay, a
+				// user-defined node) still needs an addressable id.
+				data = append(data, map[string]any{
+					"id":       id + "/" + providers.DefaultImageModel(id),
+					"object":   "model",
+					"kind":     kind,
+					"owned_by": id,
+					"endpoint": kindEndpoint(kind),
+					"created":  now,
+				})
+				continue
+			}
 			data = append(data, map[string]any{
 				"id":       id,
 				"object":   "model",
@@ -1267,6 +1298,16 @@ func (h *ChatHandler) HandleResponsesCompact(w http.ResponseWriter, r *http.Requ
 
 	var m map[string]any
 	if err := json.Unmarshal(body, &m); err != nil {
+		handlerutil.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if m == nil {
+		// Valid JSON that is not an object (`null`, `4`, `"x"`, `[]`) decodes
+		// into a nil map with a nil error, and the write below used to panic
+		// with "assignment to entry in nil map" — chi's Recoverer then answered
+		// a bare 500 with no payload. The body is client-controlled and checked
+		// nowhere else on this endpoint, so the boundary answers 400 the way
+		// the invalid-JSON branch above does.
 		handlerutil.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}

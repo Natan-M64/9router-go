@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -27,6 +28,75 @@ func TestStreamContentPeeker_EmitsContentAndCommits(t *testing.T) {
 	err := peeker.Finish()
 	if err != nil {
 		t.Fatalf("unexpected error on finish: %v", err)
+	}
+}
+
+func TestStreamContentPeekerPreservesAnthropicPreamble(t *testing.T) {
+	rec := httptest.NewRecorder()
+	peeker := NewStreamContentPeeker(rec)
+	frames := []string{
+		"data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\"}}\n\n",
+		"data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+		"data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hello\"}}\n\n",
+	}
+	for i, frame := range frames {
+		if _, err := peeker.Write([]byte(frame)); err != nil {
+			t.Fatalf("write frame %d: %v", i, err)
+		}
+		if i < len(frames)-1 && rec.Body.Len() != 0 {
+			t.Fatalf("peeker committed structural preamble after frame %d", i)
+		}
+	}
+	if err := peeker.Finish(); err != nil {
+		t.Fatalf("Finish: %v", err)
+	}
+	want := frames[0] + frames[1] + frames[2]
+	if got := rec.Body.String(); got != want {
+		t.Fatalf("relayed stream = %q, want all preamble and content frames %q", got, want)
+	}
+}
+
+func TestStreamContentPeekerPreservesSplitAnthropicPreamble(t *testing.T) {
+	rec := httptest.NewRecorder()
+	peeker := NewStreamContentPeeker(rec)
+	frames := []string{
+		"data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\"}}\n\n",
+		"data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+		"data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hello\"}}\n\n",
+	}
+	for i, frame := range frames {
+		middle := len(frame) / 2
+		for _, part := range [][]byte{[]byte(frame[:middle]), []byte(frame[middle:])} {
+			if _, err := peeker.Write(part); err != nil {
+				t.Fatalf("write split frame %d: %v", i, err)
+			}
+		}
+		if i < len(frames)-1 && rec.Body.Len() != 0 {
+			t.Fatalf("peeker committed structural preamble after split frame %d", i)
+		}
+	}
+	if err := peeker.Finish(); err != nil {
+		t.Fatalf("Finish: %v", err)
+	}
+	want := frames[0] + frames[1] + frames[2]
+	if got := rec.Body.String(); got != want {
+		t.Fatalf("relayed stream = %q, want all split preamble and content frames %q", got, want)
+	}
+}
+
+func TestStreamContentPeekerDoesNotDuplicatePreambleAtBufferLimit(t *testing.T) {
+	rec := httptest.NewRecorder()
+	peeker := NewStreamContentPeeker(rec)
+	padding := strings.Repeat("x", bannerHoldLimit)
+	frame := "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"metadata\":{\"padding\":\"" + padding + "\"}}}\n\n"
+	if !FrameParses([]byte(frame)) {
+		t.Fatal("large message_start fixture is not a complete SSE frame")
+	}
+	if _, err := peeker.Write([]byte(frame)); err != nil {
+		t.Fatalf("write large preamble: %v", err)
+	}
+	if got := rec.Body.String(); got != frame {
+		t.Fatalf("relayed %d bytes for a %d-byte preamble; want it exactly once", len(got), len(frame))
 	}
 }
 

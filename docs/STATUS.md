@@ -1,7 +1,7 @@
 # Status
 
-Updated 2026-11-26 · Fork `Natan-M64/9router-go` (upstream `luqman-v1/9router-go` / `decolua/9router`)
-Current milestone: **Billing cost basis and Venice quota merged** in PR #2 (`ccb977dc`); local `main` synchronized to `fork/main`. Next: sync 43 upstream commits in a dedicated branch; merge preview reports conflicts in `Makefile`, jailbreak tests/UI, and usage handler; finish live MVP proof and investigate usage findings.
+Updated 2026-11-27 · Fork `Natan-M64/9router-go` (upstream `luqman-v1/9router-go` / `decolua/9router`)
+Current milestone: **review fixes for upstream sync PR #4** (`Natan-M64/9router-go`, branch `sync/upstream-20`) — authorization, IP concurrency, project-ID persistence, SSE preamble and lint findings have fixes with local regression coverage. Next: publish the update, wait for PR CI (including PostgreSQL), then the operator restarts the rebuilt binary (R13).
 Last proof: [journal/2026-11.md](journal/2026-11.md).
 Optimization plan: [optimization-roadmap.md](optimization-roadmap.md) · RTK filters: [RTK_FILTERS.md](RTK_FILTERS.md).
 Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
@@ -38,7 +38,7 @@ Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 | R5 | RTK + built-in Headroom double pass measured at no cost (209.8 ms with and without), so roadmap 1.2a does not hold | REFUTED in the roadmap. |
 | R11 | A reply hit `finish_reason: length` at 1133 tokens (limit 65536) on `main-fast` → `antigravity/gemini-4-hydrogen-low`. The gateway relays Gemini's `MAX_TOKENS` unchanged; the sent `maxOutputTokens` and `thoughtsTokenCount` are not recorded | Records now carry `finishReason` and the client's `maxTokens`; check both on the next `length`. |
 | R12 | This session runs **through** the local gateway, so stopping or restarting that process cuts the session and the operator has to start it again by hand. The running binary predates the current source tree | Never stop/kill the gateway from tooling; rebuild and let the operator restart. |
-| R13 | Kilo `JSON parsing failed` on `ocg/deepseek-v4.1-flash-free`: the provider packs the tool-call chunk and the `finish_reason:"tool_calls"` terminal chunk with a single `\n` between them, so a strict client reads one SSE event carrying two JSON payloads. `SSECopy.writeEvents` now splits consecutive `data:` lines with a blank separator (`internal/proxy/sse_copy.go`, test `sse_packed_data_events_test.go`); the test was red before the fix and green after, and `go vet ./...` + full `go test ./...` pass | Rebuilt and restarted (PID 77779). Post-restart: 12 tool-call streams, 219 events, 207 JSON payloads, 0 adjacent `data:` lines, every run closed with `[DONE]` — no regression. The intermittent upstream packing did not reproduce live, so the deterministic proof remains the unit test. |
+| R13 | Kilo `JSON parsing failed` on `ocg/deepseek-v4.1-flash-free`: the provider packs the tool-call and terminal `tool_calls` chunks with a single `\n`, so a strict client reads one event with two payloads. `SSECopy.writeEvents` splits consecutive `data:` lines with a blank separator (`internal/proxy/sse_copy.go`, `sse_packed_data_events_test.go`), pinned red→green including byte-at-a-time reads | **Recurrence explained 2026-11-26**: `go version -m` shows the process on `:20130` (PID 88437) runs revision `ccb977dc`, built 11:41, before the fix commits (12:10, 12:27) — the fix was never deployed. Binary rebuilt to `ad42a401` at 14:34; the operator must restart the gateway, since this session runs through it. |
 | R2 | The GHCR package `ghcr.io/natan-m64/9router-go` may be private by default on GitHub Packages | The user switches visibility to Public if `docker pull` without login is wanted. |
 
 ## Done in the last 7 days
@@ -48,14 +48,8 @@ Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 - **Catalog, thinking UX and combos (`eb29c708`, `f1166342`, `41ea97db`)**: `gpt-6.2-sol`, `-sol[1m]`, `gpt-6.2-astra`, `-astra[1m]`, `gpt-6.1-terra`, a weekly upstream check, `thinkingLevels` badges, a per-model `Thinking:` selector, and `9router-combos-v1`/`omniroute-combos-v1` import-export with provider-abbreviation mapping.
 - **Stabilisation (`d242f9ff` to `da41a01c`)**: daemon recognised by start time on macOS 27, `make ci-local`, images only on tags, RTK filter selection and result cache, snapshot compaction, prompt-cache fixes, OpenRouter `cache_control`, the DeepSeek wire name, the upstream sync and changelog fragments.
 
-## Verified (2026-11-26)
+## Verified (2026-11-27)
 
-- `go test ./... -count=1` exit 0 on the current tree: 11,327 tests in 84 packages (second run captured to a log, `EXIT=0`, no `FAIL`).
-- `bun test src scripts`: 1057 pass / 0 fail, 2040 assertions, 82 files. `bun run ratchet:svelte`: 0 unresolved identifiers, 0 errors.
-- Same tree, earlier today: `make test-integration`, `bun run build`, `oxlint` and both e2e suites (`quotaTrackerCache`, `usageCostBasis`) passed; the cache e2e failed on the base build without hydration, so it is a real regression test.
-- Not re-run after the last edit: `make cross`, `go test -race`, Docker/GHCR.
-- Token efficiency observed: prompt cache saved 412,247,811 tokens over 3,175 requests (about `$204.01`); compression saved 15,532,204 tokens.
-
-## Verified (2026-11-24)
-
-Moved to the journal: [journal/2026-11.md](journal/2026-11.md) — live DeepSeek records after restart, `make ci-local` (77 packages) and CI green, the upstream sync with `ds/deepseek-v4.1-flash` 400 → 200, and the live chat/stream pass. Not verified then: gemini/groq/kilocode, real Playwright snapshots, `jailbreak`/`plans` deep-link redirect.
+- `sync/upstream-20`, after merging `origin/main` through `46a9b69d`: `go test -count=1 ./...` passed (85 packages), `go vet ./...` exited 0, and `make test-integration` passed. Independent review found no lost fork changes or blockers.
+- Not run for this sync: `make cross`, `go test -race`, the e2e dashboard suites, the PostgreSQL smoke, and OpenWrt shell validation.
+- Review-fix validation: full `go test -count=1 ./...`, `go vet ./...`, and `make test-integration` pass; Playground, SSE peeker and IP-limiter regression tests pass under focused race runs; `gofmt -d` and `git diff --check` are clean. PostgreSQL smoke skips locally because `TEST_PG_DSN` is unavailable; PR CI must verify it.
