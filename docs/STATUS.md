@@ -1,7 +1,7 @@
 # Status
 
 Updated 2026-11-26 · Fork `Natan-M64/9router-go` (upstream `luqman-v1/9router-go` / `decolua/9router`)
-Current milestone: **upstream sync in PR #4** (`Natan-M64/9router-go`, branch `sync/upstream-20`) — `origin/main` (`67a4bc94`, v1.9.17, 44 commits) merged, 5 conflicts resolved, gates green. Next: PR CI, then the operator restarts the gateway to deploy the rebuilt binary (R13).
+Current milestone: **upstream sync in PR #4** (`Natan-M64/9router-go`, branch `sync/upstream-20`) — `origin/main` through `46a9b69d` merged; the follow-up delta (17 unique commits, 7 first-parent) had no conflicts. Go unit, vet, and integration gates pass. Next: PR CI, then the operator restarts the gateway to deploy the rebuilt binary (R13).
 Last proof: [journal/2026-11.md](journal/2026-11.md).
 Optimization plan: [optimization-roadmap.md](optimization-roadmap.md) · RTK filters: [RTK_FILTERS.md](RTK_FILTERS.md).
 Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
@@ -50,7 +50,5 @@ Limits of this file: ≤120 lines, ≤8 KB, ≤2 cards in Now.
 
 ## Verified (2026-11-26)
 
-- `sync/upstream-20`, after merging `origin/main` (`67a4bc94`): `go build ./...` and `go vet ./...` exit 0; `go test -count=1 ./...` exit 0 (80 packages `ok`, no `FAIL`); `make test-integration` exit 0; `bun test` 1091 pass; `ratchet:svelte` 0 errors; `oxlint --deny-warnings` exit 0.
-- Not re-run after the merge: `make cross`, `go test -race`, the e2e dashboard suites, the PostgreSQL smoke; no independent review of the merge.
-
-
+- `sync/upstream-20`, after merging `origin/main` through `46a9b69d`: `go test -count=1 ./...` passed (85 packages), `go vet ./...` exited 0, and `make test-integration` passed. Independent review found no lost fork changes or blockers.
+- Not run for this sync: `make cross`, `go test -race`, the e2e dashboard suites, the PostgreSQL smoke, and OpenWrt shell validation.

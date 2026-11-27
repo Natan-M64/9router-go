@@ -37,7 +37,7 @@ func TestHandleTestModelLLMProbeKind(t *testing.T) {
 	defer cleanup()
 
 	priority := 1
-	if err := database.CreateProviderConnectionFull(context.Background(), 
+	if err := database.CreateProviderConnectionFull(context.Background(),
 		"conn-llm-kind", "testprov", "sk-test", "testconn", &priority,
 		`{"apiKey":"sk-test","baseUrl":"`+srv.URL+`"}`,
 	); err != nil {

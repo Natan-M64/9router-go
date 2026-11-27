@@ -237,7 +237,7 @@ func TestHandleGetConnectionUsage_QueuedClientGoneFetchesNothing(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	t.Cleanup(cleanup)
 
-	if err := repo.CreateProviderConnectionFull(context.Background(), 
+	if err := repo.CreateProviderConnectionFull(context.Background(),
 		"ag-cancel", "antigravity", "oauth", "ag-cancel", nil, `{"accessToken":"tok","projectId":"proj"}`,
 	); err != nil {
 		t.Fatalf("seed connection: %v", err)
