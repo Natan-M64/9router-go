@@ -31,7 +31,14 @@ score.
     <img src="https://avatars.githubusercontent.com/u/64591494?v=4&s=200" alt="M Riyadh Azhar" loading="lazy" decoding="async" width="64" height="64" />
     <p class="contrib-name"><a href="https://github.com/mriazh">M Riyadh Azhar</a></p>
     <p class="contrib-login">@mriazh</p>
-    <p class="contrib-count">217 commits</p>
+    <p class="contrib-count">220 commits</p>
+  </div>
+
+  <div class="contrib-card">
+    <img src="https://avatars.githubusercontent.com/u/20932301?v=4&s=200" alt="Helmi Amirudin" loading="lazy" decoding="async" width="64" height="64" />
+    <p class="contrib-name"><a href="https://github.com/helmiau">Helmi Amirudin</a></p>
+    <p class="contrib-login">@helmiau</p>
+    <p class="contrib-count">131 commits</p>
   </div>
 
   <div class="contrib-card">
@@ -42,17 +49,10 @@ score.
   </div>
 
   <div class="contrib-card">
-    <img src="https://avatars.githubusercontent.com/u/20932301?v=4&s=200" alt="Helmi Amirudin" loading="lazy" decoding="async" width="64" height="64" />
-    <p class="contrib-name"><a href="https://github.com/helmiau">Helmi Amirudin</a></p>
-    <p class="contrib-login">@helmiau</p>
-    <p class="contrib-count">111 commits</p>
-  </div>
-
-  <div class="contrib-card">
     <img src="https://avatars.githubusercontent.com/u/205633185?v=4&s=200" alt="Alexios Mercer" loading="lazy" decoding="async" width="64" height="64" />
     <p class="contrib-name"><a href="https://github.com/UnnamedPeople-Chin">Alexios Mercer</a></p>
     <p class="contrib-login">@UnnamedPeople-Chin</p>
-    <p class="contrib-count">32 commits</p>
+    <p class="contrib-count">37 commits</p>
   </div>
 
   <div class="contrib-card">
@@ -67,6 +67,13 @@ score.
     <p class="contrib-name"><a href="https://github.com/TahsinArafat">Tahsin Arafat</a></p>
     <p class="contrib-login">@TahsinArafat</p>
     <p class="contrib-count">10 commits</p>
+  </div>
+
+  <div class="contrib-card">
+    <img src="https://avatars.githubusercontent.com/u/131765086?v=4&s=200" alt="Alexander Davin Kristanto" loading="lazy" decoding="async" width="64" height="64" />
+    <p class="contrib-name"><a href="https://github.com/lw-xiong">Alexander Davin Kristanto</a></p>
+    <p class="contrib-login">@lw-xiong</p>
+    <p class="contrib-count">6 commits</p>
   </div>
 
   <div class="contrib-card">
@@ -129,13 +136,6 @@ score.
     <img src="https://avatars.githubusercontent.com/u/83304856?v=4&s=200" alt="ufw" loading="lazy" decoding="async" width="64" height="64" />
     <p class="contrib-name"><a href="https://github.com/blestafist">ufw</a></p>
     <p class="contrib-login">@blestafist</p>
-    <p class="contrib-count">3 commits</p>
-  </div>
-
-  <div class="contrib-card">
-    <img src="https://avatars.githubusercontent.com/u/131765086?v=4&s=200" alt="Alexander Davin Kristanto" loading="lazy" decoding="async" width="64" height="64" />
-    <p class="contrib-name"><a href="https://github.com/lw-xiong">Alexander Davin Kristanto</a></p>
-    <p class="contrib-login">@lw-xiong</p>
     <p class="contrib-count">3 commits</p>
   </div>
 
