@@ -18,7 +18,7 @@ needs a human does not paint the run red.
 | `up_to_date` | upstream is already contained in the fork |
 | `needs_review` | a guard stopped the preview; see the run summary |
 | `ready` | clean candidate; publication is allowed when opted in |
-| `error` | a real Git failure; the run fails |
+| `error` | a real Git failure in the simulation or in a guard; the run fails |
 
 Guards that produce `needs_review`:
 
@@ -49,8 +49,9 @@ ancestry is preserved.
 ## Release commits
 
 An upstream release commit (for example `1.9.18-exp.1`) folds every fragment into
-`CHANGELOG.md` and deletes them. It always stops the automation: the preview sees
-a `CHANGELOG.md` conflict and a protected path.
+`CHANGELOG.md` and deletes them. It stops the automation: the simulated merge
+conflicts in `CHANGELOG.md`, and resolving it by taking upstream's side would also
+change the protected paths, so the preview reports `needs_review` either way.
 
 Resolve it the same way every time:
 
