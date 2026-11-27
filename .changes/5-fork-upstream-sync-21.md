@@ -1,10 +1,16 @@
-### chore(sync): merge luqman-v1 upstream through `cd3978fc`
-- Integrate 36 upstream commits from fork base `641e842d`, keeping the fork's
+### chore(sync): merge luqman-v1 upstream through `812a8383`
+- Integrate 41 upstream commits from fork base `641e842d`, keeping the fork's
   `ci-local` gate and Antigravity account-ban handling while adopting the
   upstream race timeout and context-aware connection error writes.
-- Merge five more commits through `cd3978fc` without conflicts: request-scoped
-  chat settings reuse, OpenCode session rotation on HTTP 429, wrapped daemon
-  sentinel handling, and wiki documentation and link updates.
+- Merge five commits through `cd3978fc` without conflicts: request-scoped chat
+  settings reuse, OpenCode session rotation on HTTP 429, wrapped daemon sentinel
+  handling, and wiki documentation and link updates.
+- Merge the `1.9.18-exp.1` release commit by adopting its `VERSION` and
+  `updater.CurrentVersion` bump while keeping `CHANGELOG.md` and the existing
+  `.changes` fragments at the fork's version. The generated changelog fold is
+  intentionally not imported: the dashboard assembles `CHANGELOG.md` plus
+  fragments, so dropping the fragments without the fold would remove their
+  entries, and a `CHANGELOG.md` hunk is not allowed in a PR (§7.6).
 - Isolate the CLI `doctor` test from the host daemon and retain explicit
   `--port 0` handling without the unused wrapper.
 - Add a scheduled and manual upstream preview. Draft-PR publication is opt-in;
