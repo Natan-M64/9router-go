@@ -30,10 +30,28 @@ name: OpenWrt package test
 # compromised mirror must not be able to substitute one.
 
 on:
+  # Every push to main still boots the guest, so a Go change that breaks
+  # packaging is caught by the merge commit itself.
   push:
     branches: [main]
+  # A pull request only pays the ~10 minutes when it can change the package:
+  # the OpenWrt files, the ipk builder, the module, or the version.
   pull_request:
     branches: [main]
+    paths:
+      - "openwrt/**"
+      - "tools/ipkbuild/**"
+      - "scripts/openwrt-*"
+      - "Makefile"
+      - "go.mod"
+      - "go.sum"
+      - "VERSION"
+      - "version.json"
+      - ".github/workflows/openwrt-vm-test.yml"
+  # Drift (an upstream package change, a base image that moved) is caught here
+  # even when no PR touched packaging.
+  schedule:
+    - cron: "17 4 * * *"
   workflow_dispatch:
 
 permissions:

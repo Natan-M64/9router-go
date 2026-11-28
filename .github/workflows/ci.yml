@@ -265,7 +265,12 @@ jobs:
 
           echo "changelog fragment present."
 
-  test:
+  # The SPA suite and the svelte ratchet used to live in the one `test` job,
+  # behind the Go toolchain and the browser install. They depend on neither, so
+  # they run on their own: a broken component fails in about a minute instead of
+  # waiting for `go test ./...` to finish.
+  web:
+    name: Web checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -275,19 +280,17 @@ jobs:
         with:
           bun-version: 1.4.2
 
-      - name: Build Web SPA
-        run: |
-          cd web
-          bun install --frozen-lockfile
-          bun run build
+      - name: Install web dependencies
+        working-directory: web
+        run: bun install --frozen-lockfile
 
       # The web suite ran nowhere before this: CI only built the SPA, so a PR
       # breaking client.ts or router.ts still went green. bun:test needs no
       # extra dependency — the runner already has bun and the install above.
       #
       # src/ and scripts/ are named explicitly because bare `bun test` also
-      # collected web/e2e, which boots the gateway binary this job builds two
-      # steps later. Those suites died on ENOENT and buried 325 passing tests.
+      # collected web/e2e, which boots the gateway binary. Those suites died on
+      # ENOENT and buried 325 passing tests.
       - name: Test web
         working-directory: web
         run: bun test src scripts
@@ -302,45 +305,101 @@ jobs:
         working-directory: web
         run: bun run ratchet:svelte
 
+  # The Go suite is split into three shards of packages. scripts/ci-shard.sh
+  # walks the sorted `go list ./...` output, so the shards are disjoint and
+  # their union is the whole module — sharding never silently drops a package.
+  # Each shard vets and tests only its packages and writes its own coverage
+  # profile; the `coverage` job merges them, so the profile no longer costs a
+  # fourth full run of the suite.
+  test-go:
+    name: Go tests (shard ${{ matrix.shard }}/3)
+    needs: build-web
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # web/dist must exist before any Go package compiles (web/embed.go).
+      - name: Download web/dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.27.4"
           cache: true
 
-      - name: Vet
-        run: go vet ./...
+      - name: Vet and test shard
+        run: bash scripts/ci-go-shard.sh ${{ matrix.shard }} 3 test
 
-      - name: Test
-        run: go test ./... -v
+      - name: Upload coverage shard
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-shard-${{ matrix.shard }}
+          path: coverage-${{ matrix.shard }}.out
+          retention-days: 1
+          if-no-files-found: error
+
+  # Every gate above is structurally blind to the DOM. `tsc` reads types,
+  # `vite build` bundles, the ratchet counts diagnostics, and `go test`
+  # exercises the HTTP API without rendering a component — so a destructive
+  # action losing its confirmation dialog passes all of them. That is not
+  # hypothetical: collapsing the API-key row controls into a menu (#224)
+  # dropped the confirm() on delete and regenerate, and every gate stayed
+  # green. This job drives the real binary in a real browser.
+  e2e:
+    name: Dashboard E2E
+    needs: build-web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The binary embeds web/dist; the artifact keeps this job from rebuilding
+      # the SPA.
+      - name: Download web/dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Install web dependencies
+        working-directory: web
+        run: bun install --frozen-lockfile
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.4"
+          cache: true
 
       # The binary is built with Go's default -pgo=auto, which silently stops
       # applying cmd/9router-go/default.pgo the moment that file is renamed,
       # gitignored, .dockerignore'd, or a -pgo=off flag creeps in. Nothing about
       # the build would fail — it would just quietly get slower, so the flag is
       # asserted here instead of trusted.
-      - name: Build
-        run: go build -ldflags="-s -w" -o /tmp/9router-go ./cmd/9router-go/
+      - name: Build binary for E2E
+        run: go build -ldflags="-s -w" -o 9router-go ./cmd/9router-go/
 
       - name: Assert PGO is applied
         run: |
-          go version -m /tmp/9router-go | grep -q -- '-pgo=' || {
+          go version -m 9router-go | grep -q -- '-pgo=' || {
             echo "::error::PGO profile not applied to the release binary."
             echo "Check that cmd/9router-go/default.pgo is committed and that"
             echo "no build step passes -pgo=off."
             exit 1
           }
-          go version -m /tmp/9router-go | grep -- '-pgo='
-
-      # Every gate above is structurally blind to the DOM. `tsc` reads types,
-      # `vite build` bundles, the ratchet counts diagnostics, and `go test`
-      # exercises the HTTP API without rendering a component — so a destructive
-      # action losing its confirmation dialog passes all of them. That is not
-      # hypothetical: collapsing the API-key row controls into a menu (#224)
-      # dropped the confirm() on delete and regenerate, and every gate stayed
-      # green. This job drives the real binary in a real browser.
-      - name: Build binary for E2E
-        run: go build -o 9router-go ./cmd/9router-go/
+          go version -m 9router-go | grep -- '-pgo='
 
       - name: Install Chromium
         working-directory: web
@@ -421,8 +480,12 @@ jobs:
   # than an un-raced build, and internal/handlers/chat alone takes ~100s
   # without it.
   race:
-    name: Race detector
+    name: Race detector (shard ${{ matrix.shard }}/3)
     needs: build-web
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -441,40 +504,47 @@ jobs:
           go-version: "1.27.4"
           cache: true
 
+      # The suite is sharded by package so three runners share what used to be a
+      # single 12-minute -race pass; scripts/ci-shard.sh keeps the shards
+      # disjoint and their union equal to ./... . The 20m timeout stays per
+      # shard, and the measured headroom behind it is unchanged.
       - name: Test with race detector
-        run: go test -race -count=1 -timeout 20m ./...
+        run: bash scripts/ci-go-shard.sh ${{ matrix.shard }} 3 race
+
   # ROADMAP §4 asks for a coverage profile CI publishes *and* a non-regression
-  # rule; until now the suite produced neither. The profile is the artifact; the
-  # rule is scripts/coverage-gate.sh comparing the total against
-  # .github/coverage-baseline.txt.
+  # rule; the profile is the artifact and scripts/coverage-gate.sh compares the
+  # total against .github/coverage-baseline.txt.
   #
-  # The gate runs on the un-raced suite on purpose: `-race` instruments every
-  # allocation, which is orthogonal to which statements execute, and pairing the
-  # two would double the job's runtime to produce the same total. It needs
-  # web/dist for the same reason every other Go job does.
+  # The profile now comes from the `test-go` shards, each covering a disjoint set
+  # of packages, instead of a fourth full run of the suite. The gate runs on the
+  # un-raced suite on purpose: `-race` instruments every allocation, which is
+  # orthogonal to which statements execute.
   coverage:
     name: Coverage
-    needs: build-web
+    needs: test-go
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download web/dist artifact
+
+      - name: Download shard profiles
         uses: actions/download-artifact@v4
         with:
-          name: web-dist
-          path: web/dist
+          pattern: coverage-shard-*
+          merge-multiple: true
+
+      # `go tool cover` needs the toolchain, not the module cache.
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.27.4"
-          cache: true
-      # `-covermode=atomic` even without -race: the default `set` mode is
-      # undefined under concurrent execution, and several packages run tests in
-      # parallel, which would make the total vary between runs for no reason.
-      - name: Test with coverage
-        run: go test -count=1 -covermode=atomic -coverprofile=coverage.out ./...
+          cache: false
+
+      - name: Merge shard profiles
+        run: bash scripts/ci-merge-coverage.sh . coverage.out
+
       - name: Coverage gate
         run: bash scripts/coverage-gate.sh coverage.out
+
       # Published so a reviewer can see *which* functions moved, not just that
       # the total did. The gate's message names the file to bump when a drop is
       # deliberate; this artifact is what makes that decision reviewable.
@@ -498,8 +568,12 @@ jobs:
   # manifest points at a local server, and the run finishes in seconds, well
   # before the 30s model-catalog sync.
   integration:
-    name: Integration tests
+    name: Integration tests (shard ${{ matrix.shard }}/2)
     needs: build-web
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -520,15 +594,19 @@ jobs:
 
       # `go vet ./...` skips the suite: its files are behind the "integration"
       # build tag. Vet them explicitly so a broken suite fails here rather than
-      # at the next test compile.
+      # at the next test compile; it is cheap enough to run in every shard.
       - name: Vet integration suite
         run: go vet -tags=integration ./internal/integration/...
 
-      # -race catches the concurrency the proxy actually has (SSE pumps,
-      # in-memory usage tracker, per-handler sticky state). -count=1 defeats
-      # the test cache so a PR always re-runs the suite.
-      - name: Test integration
-        run: go test -tags=integration -race -count=1 -timeout 10m ./internal/integration/... -v
+      # The suite is one package with hundreds of top-level tests, so it is
+      # sharded by test name rather than by package:
+      # scripts/ci-integration-shard.sh lists the tests, partitions them
+      # deterministically, and runs only its share. -race catches the
+      # concurrency the proxy actually has (SSE pumps, in-memory usage tracker,
+      # per-handler sticky state). -count=1 defeats the test cache so a PR
+      # always re-runs the suite.
+      - name: Test integration shard
+        run: bash scripts/ci-integration-shard.sh ${{ matrix.shard }} 2
 
   # The Dockerfile was only ever built by release.yml, on a tag. Every breakage
   # it can suffer — a .dockerignore entry that swallows cmd/9router-go/, a
