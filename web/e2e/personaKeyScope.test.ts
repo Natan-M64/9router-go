@@ -138,8 +138,16 @@ describe('persona page, per-key scope', () => {
       await keyPicker.waitFor({ timeout: SLOW })
 
       // The created key is offered by name, which proves the view carries the
-      // key list the editor needs rather than rendering an empty picker.
-      expect(await keyPicker.locator('option', { hasText: 'e2e-persona-key' }).count()).toBe(1)
+      // key list the editor needs rather than rendering an empty picker. The
+      // picker element mounts before its option list arrives, so wait for the
+      // option itself: counting straight after the picker appeared raced the
+      // key fetch and failed on main (run 46151325057) while passing elsewhere.
+      const createdOption = keyPicker.locator('option', { hasText: 'e2e-persona-key' })
+      // `attached`, not the default `visible`: an <option> is never visible to
+      // Playwright until the native dropdown opens, so waiting for visibility
+      // would always time out.
+      await createdOption.waitFor({ timeout: SLOW, state: 'attached' })
+      expect(await createdOption.count()).toBe(1)
     },
     SLOW,
   )
