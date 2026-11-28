@@ -2,7 +2,8 @@ name: Upstream Fork Sync
 
 on:
   schedule:
-    - cron: '23 9 * * *'
+    # Twice a day: 00:00 and 12:00 at UTC-3, which is 03:00 and 15:00 UTC.
+    - cron: '0 3,15 * * *'
   workflow_dispatch:
     inputs:
       publish:
