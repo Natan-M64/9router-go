@@ -5,9 +5,10 @@ behavioral parity reference; the automation only mirrors the fork's own upstream
 
 ## What runs
 
-`.github/workflows/upstream-fork-sync.yml` runs daily at 09:23 UTC and on manual
-dispatch. It never checks out or executes upstream code: it fetches the upstream
-tip, simulates the merge with `git merge-tree`, and inspects the resulting tree.
+`.github/workflows/upstream-fork-sync.yml` runs twice a day, at 03:00 and 15:00
+UTC (midnight and noon at UTC-3), and on manual dispatch. It never checks out or
+executes upstream code: it fetches the upstream tip, simulates the merge with
+`git merge-tree`, and inspects the resulting tree.
 
 `scripts/upstream-sync-preview.sh <base> <upstream>` does the work and reports a
 status. Guards exit 0 with a `::warning::` annotation so a scheduled preview that
